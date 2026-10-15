@@ -31,11 +31,9 @@ export default class VideoUploadModal extends Component {
    */
   @tracked uploadProgress = 0;
 
-  /**
-   * @type {boolean}
-   */
-  @tracked
-  keepOriginalName = Boolean(this.siteSettings.video_stream_keep_original_name);
+  get keepOriginalName() {
+    return Boolean(this.siteSettings.video_stream_keep_original_name);
+  }
 
   activeUpload = null;
   latestStreamMediaId = null;
@@ -387,15 +385,6 @@ export default class VideoUploadModal extends Component {
    * @param {InputEvent & { target: HTMLInputElement }} event
    */
   @action
-  toggleKeepOriginalName(event) {
-    this.keepOriginalName = Boolean(event.target?.checked);
-  }
-
-  /**
-   * @action
-   * @param {InputEvent & { target: HTMLInputElement }} event
-   */
-  @action
   uploadVideo(event) {
     const file = event.target?.files?.[0];
     this.uploadFile(file);
@@ -424,14 +413,6 @@ export default class VideoUploadModal extends Component {
         {{else}}
           <div class="video-upload-content">
             <p>{{i18n "video_stream.upload_description"}}</p>
-            <label class="video-stream-keep-name-label">
-              <input
-                type="checkbox"
-                checked={{this.keepOriginalName}}
-                {{on "change" this.toggleKeepOriginalName}}
-              />
-              <span>{{i18n "video_stream.keep_original_name"}}</span>
-            </label>
             <input
               type="file"
               accept={{this.fileInputAccept}}
