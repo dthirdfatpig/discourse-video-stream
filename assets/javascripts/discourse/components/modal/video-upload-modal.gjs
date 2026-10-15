@@ -7,6 +7,8 @@ import { htmlSafe } from "@ember/template";
 import DButton from "discourse/components/d-button";
 import DModal from "discourse/components/d-modal";
 import loadScript from "discourse/lib/load-script";
+import { ajax } from "discourse/lib/ajax";
+import { popupAjaxError } from "discourse/lib/ajax-error";
 import { i18n } from "discourse-i18n";
 
 const BYTES_IN_MEGABYTE = 1_000_000;
@@ -37,7 +39,6 @@ export default class VideoUploadModal extends Component {
 
   activeUpload = null;
   latestStreamMediaId = null;
-  bunnyAuthHeaders = null;
 
   constructor() {
     super(...arguments);
@@ -239,13 +240,61 @@ export default class VideoUploadModal extends Component {
       throw new Error("tus-js-client global is unavailable");
     }
 
-    const upload = new TusUpload(file, {
-      endpoint: TUS_ENDPOINT,
+    const provider = this.siteSettings.video_stream_provider || "cloudflare";
+    let endpoint = TUS_ENDPOINT;
+    let headers = {};
+    let videoId = null;
+
+    if (provider === "bunny") {
+      try {
+        const prepareData = await ajax("/video-stream/prepare-upload.json", {
+          type: "POST",
+          data: {
+            file_name: file.name,
+            file_size: file.size,
+            file_type: file.type,
+          },
+        });
+
+        endpoint = prepareData.endpoint || "https://video.bunnycdn.com/tusupload";
+        headers = prepareData.headers || {};
+        videoId = prepareData.video_id;
+        this.latestStreamMediaId = videoId;
+      } catch (err) {
+        popupAjaxError(err);
+        this.resetUploaderState();
+        return;
+      }
+    }
+
+    const uploadOptions = {
+      endpoint,
       chunkSize: this.chunkSize,
       retryDelays: [0, 2000, 5000, 10000],
       removeFingerprintOnSuccess: true,
+      headers,
       metadata: this._tusMetadata(file),
-      onBeforeRequest: (req) => {
+      onProgress: (bytesUploaded, bytesTotal) => {
+        if (bytesTotal) {
+          this.uploadProgress = Math.round((bytesUploaded / bytesTotal) * 100);
+        }
+      },
+      onSuccess: () => {
+        this._handleUploadSuccess({ uploadURL: upload.url, videoId });
+      },
+      onError: (error) => {
+        this._handleUploadFailure(error);
+      },
+    };
+
+    if (provider === "bunny") {
+      uploadOptions.fingerprint = () => {
+        return Promise.resolve(
+          `bunny-${videoId}-${file.name}-${file.size}-${file.lastModified}`
+        );
+      };
+    } else {
+      uploadOptions.onBeforeRequest = (req) => {
         const url = req.getURL();
         // Only add CSRF token for requests to Discourse backend (relative URLs)
         if (url && url.startsWith("/")) {
@@ -253,59 +302,19 @@ export default class VideoUploadModal extends Component {
           if (token) {
             req.setHeader("X-CSRF-Token", token);
           }
-        } else if (this.bunnyAuthHeaders) {
-          for (const [key, val] of Object.entries(this.bunnyAuthHeaders)) {
-            if (val) {
-              req.setHeader(key, val);
-            }
-          }
         }
         return Promise.resolve();
-      },
-      onAfterResponse: (req, res) => {
+      };
+      uploadOptions.onAfterResponse = (req, res) => {
         if (req?.getMethod?.() === "POST") {
           this.latestStreamMediaId =
-            res?.getHeader?.("stream-media-id") ||
-            res?.getHeader?.("VideoId") ||
-            res?.getHeader?.("videoid") ||
-            null;
-
-          const sig =
-            res?.getHeader?.("AuthorizationSignature") ||
-            res?.getHeader?.("authorizationsignature");
-
-          if (sig) {
-            this.bunnyAuthHeaders = {
-              AuthorizationSignature: sig,
-              AuthorizationExpire:
-                res?.getHeader?.("AuthorizationExpire") ||
-                res?.getHeader?.("authorizationexpire"),
-              LibraryId:
-                res?.getHeader?.("LibraryId") ||
-                res?.getHeader?.("libraryid"),
-              VideoId:
-                res?.getHeader?.("VideoId") ||
-                res?.getHeader?.("videoid") ||
-                this.latestStreamMediaId,
-            };
-          }
+            res?.getHeader?.("stream-media-id") || null;
         }
-
         return Promise.resolve();
-      },
-      onProgress: (bytesUploaded, bytesTotal) => {
-        if (bytesTotal) {
-          this.uploadProgress = Math.round((bytesUploaded / bytesTotal) * 100);
-        }
-      },
-      onSuccess: () => {
-        this._handleUploadSuccess({ uploadURL: upload.url });
-      },
-      onError: (error) => {
-        this._handleUploadFailure(error);
-      },
-    });
+      };
+    }
 
+    const upload = new TusUpload(file, uploadOptions);
     this.activeUpload = upload;
 
     upload
@@ -324,7 +333,9 @@ export default class VideoUploadModal extends Component {
 
   _handleUploadSuccess(response) {
     const uid =
-      this.latestStreamMediaId || this._extractUidFromUrl(response?.uploadURL);
+      response?.videoId ||
+      this.latestStreamMediaId ||
+      this._extractUidFromUrl(response?.uploadURL);
 
     if (!uid) {
       this.showToast("video_stream.upload_failed");
@@ -353,7 +364,6 @@ export default class VideoUploadModal extends Component {
 
     this.activeUpload = null;
     this.latestStreamMediaId = null;
-    this.bunnyAuthHeaders = null;
     this.isUploading = false;
     this.uploadProgress = 0;
   }

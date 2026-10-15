@@ -122,35 +122,10 @@ module DiscourseVideoStream
       signature_data = "#{library_id}#{api_key}#{expires}#{video_id}"
       signature = OpenSSL::Digest::SHA256.hexdigest(signature_data)
 
-      bunny_headers = {
-        "AuthorizationSignature" => signature,
-        "AuthorizationExpire" => expires.to_s,
-        "LibraryId" => library_id.to_s,
-        "VideoId" => video_id,
-        "Tus-Resumable" => params.tus_resumable.presence || DEFAULT_TUS_VERSION,
-        "Upload-Length" => params.upload_length.to_s,
-      }
-      bunny_headers["Upload-Metadata"] = params.upload_metadata if params.upload_metadata.present?
-
-      tus_response = Faraday.post("#{BUNNY_API_HOST}/tusupload", nil, bunny_headers)
-
-      if tus_response.status >= 400
-        log_failure(tus_response.status, parse_body(tus_response.body))
-        context.fail!(error: I18n.t("video_stream.errors.upload_url"), status: 422)
-      end
-
-      raw_location = tus_response.headers["Location"].presence || "#{BUNNY_API_HOST}/tusupload/#{video_id}"
-      upload_url =
-        if raw_location.start_with?("http://", "https://")
-          raw_location
-        else
-          URI.join(BUNNY_API_HOST, raw_location).to_s
-        end
-
       {
-        upload_url: upload_url,
+        upload_url: "#{BUNNY_API_HOST}/tusupload",
         stream_media_id: video_id,
-        tus_resumable: tus_response.headers["tus-resumable"].presence || params.tus_resumable,
+        tus_resumable: params.tus_resumable.presence || DEFAULT_TUS_VERSION,
         extra_headers: {
           "AuthorizationSignature" => signature,
           "AuthorizationExpire" => expires.to_s,

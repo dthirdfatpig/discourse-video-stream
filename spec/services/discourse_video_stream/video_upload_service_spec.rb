@@ -121,23 +121,13 @@ RSpec.describe DiscourseVideoStream::VideoUploadService do
         expect(context[:status]).to eq(422)
       end
 
-      it "creates video, signs request, and initializes TUS upload with Bunny" do
+      it "creates video and returns signed upload details for Bunny" do
         create_response =
           instance_double(
             Faraday::Response,
             status: 200,
             body: { "guid" => "video-guid-123" }.to_json,
             headers: {},
-          )
-        tus_response =
-          instance_double(
-            Faraday::Response,
-            status: 201,
-            body: nil,
-            headers: {
-              "Location" => "https://video.bunnycdn.com/tusupload/video-guid-123",
-              "tus-resumable" => "1.0.0",
-            },
           )
 
         allow(Faraday).to receive(:post).with(
@@ -146,21 +136,11 @@ RSpec.describe DiscourseVideoStream::VideoUploadService do
           hash_including("AccessKey" => api_key),
         ).and_return(create_response)
 
-        allow(Faraday).to receive(:post).with(
-          "https://video.bunnycdn.com/tusupload",
-          nil,
-          hash_including(
-            "LibraryId" => library_id,
-            "VideoId" => "video-guid-123",
-            "Tus-Resumable" => "1.0.0",
-          ),
-        ).and_return(tus_response)
-
         context = described_class.call(params: service_params)
 
         expect(context.success?).to eq(true)
         expect(context[:upload_details]).to include(
-          upload_url: "https://video.bunnycdn.com/tusupload/video-guid-123",
+          upload_url: "https://video.bunnycdn.com/tusupload",
           stream_media_id: "video-guid-123",
           tus_resumable: "1.0.0",
         )

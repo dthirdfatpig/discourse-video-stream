@@ -24,6 +24,20 @@ module DiscourseVideoStream
       render json: context[:live_input]
     end
 
+    def prepare_upload
+      context = PrepareUploadService.call(params: prepare_upload_params)
+
+      if context.failure?
+        render_json_error(
+          context[:error] || I18n.t("video_stream.errors.upload_url"),
+          status: context[:status] || 422,
+        )
+        return
+      end
+
+      render json: context[:upload_details]
+    end
+
     def upload_url
       context = VideoUploadService.call(params: upload_request_headers)
 
@@ -40,6 +54,15 @@ module DiscourseVideoStream
     end
 
     private
+
+    def prepare_upload_params
+      {
+        file_name: params[:file_name] || params[:title],
+        file_size: params[:file_size],
+        file_type: params[:file_type],
+        creator_id: current_user&.id,
+      }
+    end
 
     def upload_request_headers
       {
