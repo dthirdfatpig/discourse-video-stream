@@ -18,8 +18,18 @@ function shouldInterceptUpload(file, siteSettings) {
     return false;
   }
 
-  if (!siteSettings.video_stream_customer_subdomain) {
-    return false;
+  const provider = siteSettings.video_stream_provider || "cloudflare";
+  if (provider === "bunny") {
+    if (
+      !siteSettings.video_stream_bunny_library_id ||
+      !siteSettings.video_stream_bunny_hostname
+    ) {
+      return false;
+    }
+  } else {
+    if (!siteSettings.video_stream_customer_subdomain) {
+      return false;
+    }
   }
 
   const thresholdBytes =

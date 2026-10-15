@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "base64"
+require "openssl"
 
 module DiscourseVideoStream
   class VideoUploadService
@@ -8,6 +9,7 @@ module DiscourseVideoStream
 
     CF_API_PATH =
       "https://api.cloudflare.com/client/v4/accounts/%{account_id}/stream?direct_user=true"
+    BUNNY_API_HOST = "https://video.bunnycdn.com"
     DEFAULT_MAX_DURATION_SECONDS = 300
     DEFAULT_TUS_VERSION = "1.0.0"
 
@@ -35,6 +37,16 @@ module DiscourseVideoStream
     private
 
     def fetch_upload_details(params:)
+      provider = SiteSetting.video_stream_provider.presence || "cloudflare"
+
+      if provider == "bunny"
+        fetch_bunny_upload_details(params)
+      else
+        fetch_cloudflare_upload_details(params)
+      end
+    end
+
+    def fetch_cloudflare_upload_details(params)
       account_id = SiteSetting.video_stream_account_id.presence
       api_token = SiteSetting.video_stream_api_token.presence
 
@@ -69,6 +81,102 @@ module DiscourseVideoStream
     rescue JSON::ParserError, Faraday::Error => error
       log_exception(error)
       context.fail!(error: I18n.t("video_stream.errors.upload_url"), status: 422)
+    end
+
+    def fetch_bunny_upload_details(params)
+      library_id = SiteSetting.video_stream_bunny_library_id.presence
+      api_key = SiteSetting.video_stream_bunny_api_key.presence
+
+      if library_id.blank? || api_key.blank?
+        context.fail!(error: I18n.t("video_stream.errors.misconfigured"), status: 422)
+      end
+
+      metadata = parse_metadata(params.upload_metadata)
+      title = extract_video_title(metadata)
+
+      create_response =
+        Faraday.post(
+          "#{BUNNY_API_HOST}/library/#{library_id}/videos",
+          { title: title }.to_json,
+          {
+            "AccessKey" => api_key,
+            "Content-Type" => "application/json",
+            "Accept" => "application/json",
+          },
+        )
+
+      if create_response.status >= 400
+        log_failure(create_response.status, parse_body(create_response.body))
+        context.fail!(error: I18n.t("video_stream.errors.upload_url"), status: 422)
+      end
+
+      body = parse_body(create_response.body)
+      video_id = body["guid"].presence
+
+      if video_id.blank?
+        log_failure(create_response.status, body)
+        context.fail!(error: I18n.t("video_stream.errors.upload_url"), status: 422)
+      end
+
+      expires = (Time.now + 24.hours).to_i
+      signature_data = "#{library_id}#{api_key}#{expires}#{video_id}"
+      signature = OpenSSL::Digest::SHA256.hexdigest(signature_data)
+
+      bunny_headers = {
+        "AuthorizationSignature" => signature,
+        "AuthorizationExpire" => expires.to_s,
+        "LibraryId" => library_id.to_s,
+        "VideoId" => video_id,
+        "Tus-Resumable" => params.tus_resumable.presence || DEFAULT_TUS_VERSION,
+        "Upload-Length" => params.upload_length.to_s,
+      }
+      bunny_headers["Upload-Metadata"] = params.upload_metadata if params.upload_metadata.present?
+
+      tus_response = Faraday.post("#{BUNNY_API_HOST}/tusupload", nil, bunny_headers)
+
+      if tus_response.status >= 400
+        log_failure(tus_response.status, parse_body(tus_response.body))
+        context.fail!(error: I18n.t("video_stream.errors.upload_url"), status: 422)
+      end
+
+      raw_location = tus_response.headers["Location"].presence || "#{BUNNY_API_HOST}/tusupload/#{video_id}"
+      upload_url =
+        if raw_location.start_with?("http://", "https://")
+          raw_location
+        else
+          URI.join(BUNNY_API_HOST, raw_location).to_s
+        end
+
+      {
+        upload_url: upload_url,
+        stream_media_id: video_id,
+        tus_resumable: tus_response.headers["tus-resumable"].presence || params.tus_resumable,
+        extra_headers: {
+          "AuthorizationSignature" => signature,
+          "AuthorizationExpire" => expires.to_s,
+          "LibraryId" => library_id.to_s,
+          "VideoId" => video_id,
+        },
+      }
+    rescue JSON::ParserError, Faraday::Error => error
+      log_exception(error)
+      context.fail!(error: I18n.t("video_stream.errors.upload_url"), status: 422)
+    end
+
+    def extract_video_title(metadata)
+      if SiteSetting.video_stream_keep_original_name
+        encoded_name = metadata["name"] || metadata["filename"]
+        if encoded_name.present?
+          begin
+            decoded = Base64.strict_decode64(encoded_name)
+            return decoded if decoded.present?
+          rescue ArgumentError
+            return encoded_name
+          end
+        end
+      end
+
+      "Discourse Video - #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}"
     end
 
     def request_headers(api_token, params)

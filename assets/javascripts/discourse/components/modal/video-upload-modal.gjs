@@ -37,6 +37,7 @@ export default class VideoUploadModal extends Component {
 
   activeUpload = null;
   latestStreamMediaId = null;
+  bunnyAuthHeaders = null;
 
   constructor() {
     super(...arguments);
@@ -57,7 +58,25 @@ export default class VideoUploadModal extends Component {
    * @returns {string|undefined}
    */
   get customerSubdomain() {
+    const provider = this.siteSettings.video_stream_provider || "cloudflare";
+    if (provider === "bunny") {
+      return this.siteSettings.video_stream_bunny_hostname?.trim();
+    }
     return this.siteSettings.video_stream_customer_subdomain?.trim();
+  }
+
+  /**
+   * @returns {boolean}
+   */
+  get isConfigured() {
+    const provider = this.siteSettings.video_stream_provider || "cloudflare";
+    if (provider === "bunny") {
+      return Boolean(
+        this.siteSettings.video_stream_bunny_library_id &&
+        this.siteSettings.video_stream_bunny_hostname
+      );
+    }
+    return Boolean(this.customerSubdomain);
   }
 
   /**
@@ -145,7 +164,7 @@ export default class VideoUploadModal extends Component {
    * @returns {boolean}
    */
   validateConfiguration() {
-    if (this.customerSubdomain) {
+    if (this.isConfigured) {
       return true;
     }
 
@@ -229,11 +248,16 @@ export default class VideoUploadModal extends Component {
       onBeforeRequest: (req) => {
         const url = req.getURL();
         // Only add CSRF token for requests to Discourse backend (relative URLs)
-        // Don't add it for Cloudflare Stream requests (absolute URLs)
         if (url && url.startsWith("/")) {
           const token = this._csrfToken();
           if (token) {
             req.setHeader("X-CSRF-Token", token);
+          }
+        } else if (this.bunnyAuthHeaders) {
+          for (const [key, val] of Object.entries(this.bunnyAuthHeaders)) {
+            if (val) {
+              req.setHeader(key, val);
+            }
           }
         }
         return Promise.resolve();
@@ -241,7 +265,30 @@ export default class VideoUploadModal extends Component {
       onAfterResponse: (req, res) => {
         if (req?.getMethod?.() === "POST") {
           this.latestStreamMediaId =
-            res?.getHeader?.("stream-media-id") || null;
+            res?.getHeader?.("stream-media-id") ||
+            res?.getHeader?.("VideoId") ||
+            res?.getHeader?.("videoid") ||
+            null;
+
+          const sig =
+            res?.getHeader?.("AuthorizationSignature") ||
+            res?.getHeader?.("authorizationsignature");
+
+          if (sig) {
+            this.bunnyAuthHeaders = {
+              AuthorizationSignature: sig,
+              AuthorizationExpire:
+                res?.getHeader?.("AuthorizationExpire") ||
+                res?.getHeader?.("authorizationexpire"),
+              LibraryId:
+                res?.getHeader?.("LibraryId") ||
+                res?.getHeader?.("libraryid"),
+              VideoId:
+                res?.getHeader?.("VideoId") ||
+                res?.getHeader?.("videoid") ||
+                this.latestStreamMediaId,
+            };
+          }
         }
 
         return Promise.resolve();
@@ -306,6 +353,7 @@ export default class VideoUploadModal extends Component {
 
     this.activeUpload = null;
     this.latestStreamMediaId = null;
+    this.bunnyAuthHeaders = null;
     this.isUploading = false;
     this.uploadProgress = 0;
   }

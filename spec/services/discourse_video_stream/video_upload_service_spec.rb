@@ -100,5 +100,75 @@ RSpec.describe DiscourseVideoStream::VideoUploadService do
       expect(context[:error]).to eq(I18n.t("video_stream.errors.upload_url"))
       expect(Faraday).to have_received(:post)
     end
+
+    context "when provider is bunny" do
+      let(:library_id) { "12345" }
+      let(:api_key) { "bunny-api-key" }
+
+      before do
+        SiteSetting.video_stream_provider = "bunny"
+        SiteSetting.video_stream_bunny_library_id = library_id
+        SiteSetting.video_stream_bunny_api_key = api_key
+      end
+
+      it "fails when required Bunny credentials are missing" do
+        SiteSetting.video_stream_bunny_api_key = ""
+
+        context = described_class.call(params: service_params)
+
+        expect(context.failure?).to eq(true)
+        expect(context[:error]).to eq(I18n.t("video_stream.errors.misconfigured"))
+        expect(context[:status]).to eq(422)
+      end
+
+      it "creates video, signs request, and initializes TUS upload with Bunny" do
+        create_response =
+          instance_double(
+            Faraday::Response,
+            status: 200,
+            body: { "guid" => "video-guid-123" }.to_json,
+            headers: {},
+          )
+        tus_response =
+          instance_double(
+            Faraday::Response,
+            status: 201,
+            body: nil,
+            headers: {
+              "Location" => "https://video.bunnycdn.com/tusupload/video-guid-123",
+              "tus-resumable" => "1.0.0",
+            },
+          )
+
+        allow(Faraday).to receive(:post).with(
+          "https://video.bunnycdn.com/library/#{library_id}/videos",
+          anything,
+          hash_including("AccessKey" => api_key),
+        ).and_return(create_response)
+
+        allow(Faraday).to receive(:post).with(
+          "https://video.bunnycdn.com/tusupload",
+          nil,
+          hash_including(
+            "LibraryId" => library_id,
+            "VideoId" => "video-guid-123",
+            "Tus-Resumable" => "1.0.0",
+          ),
+        ).and_return(tus_response)
+
+        context = described_class.call(params: service_params)
+
+        expect(context.success?).to eq(true)
+        expect(context[:upload_details]).to include(
+          upload_url: "https://video.bunnycdn.com/tusupload/video-guid-123",
+          stream_media_id: "video-guid-123",
+          tus_resumable: "1.0.0",
+        )
+        expect(context[:upload_details][:extra_headers]).to include(
+          "LibraryId" => library_id,
+          "VideoId" => "video-guid-123",
+        )
+      end
+    end
   end
 end

@@ -6,8 +6,14 @@ import { withPluginApi } from "discourse/lib/plugin-api";
  * @param {HTMLElement} container - The video container element
  * @param {string} videoId
  * @param {string} customerSubdomain
+ * @param {string} [provider]
  */
-async function initializeShakaPlayer(container, videoId, customerSubdomain) {
+async function initializeShakaPlayer(
+  container,
+  videoId,
+  customerSubdomain,
+  provider = "cloudflare"
+) {
   try {
     // Load Shaka Player UI library (includes base player + UI) and CSS from vendored assets
     await Promise.all([
@@ -69,24 +75,44 @@ async function initializeShakaPlayer(container, videoId, customerSubdomain) {
 
     ui.configure(config);
 
-    // Try DASH manifest first, fallback to HLS if it fails
-    const dashManifestUri = `https://${customerSubdomain}/${videoId}/manifest/video.mpd`;
-    const hlsManifestUri = `https://${customerSubdomain}/${videoId}/manifest/video.m3u8`;
+    // Determine manifest URIs based on provider
+    let primaryManifestUri;
+    let fallbackManifestUri;
+
+    if (provider === "bunny") {
+      primaryManifestUri = `https://${customerSubdomain}/${videoId}/playlist.m3u8`;
+    } else {
+      primaryManifestUri = `https://${customerSubdomain}/${videoId}/manifest/video.mpd`;
+      fallbackManifestUri = `https://${customerSubdomain}/${videoId}/manifest/video.m3u8`;
+    }
 
     try {
-      await player.load(dashManifestUri);
-    } catch (dashError) {
-      // eslint-disable-next-line no-console
-      console.warn("DASH manifest failed, trying HLS:", dashError);
-      try {
-        await player.load(hlsManifestUri);
-      } catch (hlsError) {
+      await player.load(primaryManifestUri);
+    } catch (primaryError) {
+      if (fallbackManifestUri) {
         // eslint-disable-next-line no-console
-        console.error("Both DASH and HLS manifests failed:", {
-          dash: dashError,
-          hls: hlsError,
-        });
-        // Show error message in the video container
+        console.warn("Primary manifest failed, trying fallback:", primaryError);
+        try {
+          await player.load(fallbackManifestUri);
+        } catch (fallbackError) {
+          // eslint-disable-next-line no-console
+          console.error("Both primary and fallback manifests failed:", {
+            primary: primaryError,
+            fallback: fallbackError,
+          });
+          container.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 2em; text-align: center; color: var(--primary-medium);">
+              <div>
+                <p>Failed to load video</p>
+                <p style="font-size: 0.9em; margin-top: 0.5em;">Video ID: ${videoId}</p>
+              </div>
+            </div>
+          `;
+          return;
+        }
+      } else {
+        // eslint-disable-next-line no-console
+        console.error("Failed to load manifest:", primaryError);
         container.innerHTML = `
           <div style="display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 2em; text-align: center; color: var(--primary-medium);">
             <div>
@@ -134,13 +160,16 @@ function initializeVideoStreamPlayer(api) {
         return;
       }
 
+      const provider = siteSettings.video_stream_provider || "cloudflare";
       const customerSubdomain =
-        siteSettings.video_stream_customer_subdomain?.trim();
+        provider === "bunny"
+          ? siteSettings.video_stream_bunny_hostname?.trim()
+          : siteSettings.video_stream_customer_subdomain?.trim();
 
       if (!customerSubdomain) {
         // eslint-disable-next-line no-console
         console.error(
-          "Video Stream: customer subdomain not configured in site settings"
+          "Video Stream: playback domain/hostname not configured in site settings"
         );
         return;
       }
@@ -160,13 +189,16 @@ function initializeVideoStreamPlayer(api) {
         // Create video element (Shaka UI will manage controls)
         const video = document.createElement("video");
         video.className = "video-stream-player";
-        video.poster = `https://${customerSubdomain}/${videoId}/thumbnails/thumbnail.jpg`;
+        video.poster =
+          provider === "bunny"
+            ? `https://${customerSubdomain}/${videoId}/thumbnail.jpg`
+            : `https://${customerSubdomain}/${videoId}/thumbnails/thumbnail.jpg`;
 
         // Add video to container
         container.appendChild(video);
 
         // Initialize Shaka Player with UI
-        initializeShakaPlayer(container, videoId, customerSubdomain);
+        initializeShakaPlayer(container, videoId, customerSubdomain, provider);
       });
     },
     {

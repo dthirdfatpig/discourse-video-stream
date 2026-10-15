@@ -129,5 +129,56 @@ RSpec.describe DiscourseVideoStream::LiveStreamService do
         expect(result[:status]).to eq(422)
       end
     end
+
+    context "when provider is bunny" do
+      let(:library_id) { "bunny_lib_999" }
+      let(:api_key) { "bunny_secret_key" }
+      let(:bunny_response) do
+        {
+          id: "bunny_live_456",
+          streamKey: "bunny_key_xyz",
+          rtmpServer: "rtmp://live.bunnycdn.com/live",
+          created: "2024-01-01T00:00:00.000000Z",
+        }
+      end
+
+      before do
+        SiteSetting.video_stream_provider = "bunny"
+        SiteSetting.video_stream_bunny_library_id = library_id
+        SiteSetting.video_stream_bunny_api_key = api_key
+      end
+
+      it "creates live stream via Bunny API" do
+        stub_request(
+          :post,
+          "https://video.bunnycdn.com/library/#{library_id}/live",
+        ).with(
+          headers: {
+            "AccessKey" => api_key,
+            "Content-Type" => "application/json",
+          },
+          body: { title: "Test Live Stream" }.to_json,
+        ).to_return(
+          status: 200,
+          body: bunny_response.to_json,
+          headers: { "Content-Type" => "application/json" },
+        )
+
+        expect(result).to be_success
+        expect(result[:live_input]).to include(
+          uid: "bunny_live_456",
+          rtmps_url: "rtmp://live.bunnycdn.com/live",
+          rtmps_stream_key: "bunny_key_xyz",
+        )
+      end
+
+      it "fails when Bunny library ID is missing" do
+        SiteSetting.video_stream_bunny_library_id = ""
+
+        expect(result).to be_failure
+        expect(result[:error]).to eq(I18n.t("video_stream.errors.misconfigured"))
+        expect(result[:status]).to eq(422)
+      end
+    end
   end
 end

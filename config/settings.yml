@@ -2,15 +2,67 @@ plugins:
   video_stream_enabled:
     default: false
     client: true
+  video_stream_provider:
+    default: "cloudflare"
+    type: enum
+    choices:
+      - "cloudflare"
+      - "bunny"
+    client: true
   video_stream_account_id:
     default: ""
     client: false
+    depends_on:
+      - video_stream_provider
+    depends_on_values:
+      video_stream_provider:
+        - "cloudflare"
+    depends_behavior: "hidden"
   video_stream_api_token:
     default: ""
     client: false
+    depends_on:
+      - video_stream_provider
+    depends_on_values:
+      video_stream_provider:
+        - "cloudflare"
+    depends_behavior: "hidden"
   video_stream_customer_subdomain:
     default: ""
     client: true
+    depends_on:
+      - video_stream_provider
+    depends_on_values:
+      video_stream_provider:
+        - "cloudflare"
+    depends_behavior: "hidden"
+  video_stream_bunny_library_id:
+    default: ""
+    client: true
+    depends_on:
+      - video_stream_provider
+    depends_on_values:
+      video_stream_provider:
+        - "bunny"
+    depends_behavior: "hidden"
+  video_stream_bunny_api_key:
+    default: ""
+    client: false
+    depends_on:
+      - video_stream_provider
+    depends_on_values:
+      video_stream_provider:
+        - "bunny"
+    depends_behavior: "hidden"
+  video_stream_bunny_hostname:
+    default: ""
+    client: true
+    depends_on:
+      - video_stream_provider
+    depends_on_values:
+      video_stream_provider:
+        - "bunny"
+    depends_behavior: "hidden"
   video_stream_allowed_extensions:
     default: "mp4,webm,mov"
     client: true

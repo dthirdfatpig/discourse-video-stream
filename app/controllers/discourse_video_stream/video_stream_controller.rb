@@ -67,7 +67,21 @@ module DiscourseVideoStream
         response.set_header("stream-media-id", upload_details[:stream_media_id])
       end
 
-      expose_headers = %w[Location Tus-Resumable stream-media-id].join(", ")
+      if upload_details[:extra_headers].is_a?(Hash)
+        upload_details[:extra_headers].each do |k, v|
+          response.set_header(k.to_s, v.to_s)
+        end
+      end
+
+      expose_headers = %w[
+        Location
+        Tus-Resumable
+        stream-media-id
+        AuthorizationSignature
+        AuthorizationExpire
+        LibraryId
+        VideoId
+      ].join(", ")
       response.set_header("Access-Control-Expose-Headers", expose_headers)
     end
   end

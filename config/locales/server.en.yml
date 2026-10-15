@@ -1,16 +1,20 @@
 en:
   site_settings:
-    video_stream_enabled: "Enable video uploads and playback using Cloudflare Stream"
+    video_stream_enabled: "Enable video uploads and playback"
+    video_stream_provider: "Streaming service provider to use for uploads and playback"
     video_stream_account_id: "Your Cloudflare Account ID (found in Cloudflare Dashboard URL)"
     video_stream_api_token: "Your Cloudflare API Token with Stream permissions"
-    video_stream_customer_subdomain: "Your Cloudflare Stream playback subdomain (without https://)"
+    video_stream_customer_subdomain: "Your Cloudflare Stream playback subdomain (without https://, e.g. customer-xxxxx.cloudflarestream.com)"
+    video_stream_bunny_library_id: "Your Bunny.net Stream Video Library ID (found under Stream > Library)"
+    video_stream_bunny_api_key: "Your Bunny.net Stream API Key / AccessKey for the video library"
+    video_stream_bunny_hostname: "Your Bunny.net Stream CDN / Pull Zone hostname (without https://, e.g. vz-xxxxxx.b-cdn.net)"
     video_stream_allowed_extensions: "Comma-separated list of allowed video file extensions"
     video_stream_max_file_size: "Maximum allowed video file size in megabytes"
     video_stream_max_duration: "Maximum allowed video duration in seconds (e.g. 300 = 5 minutes, 3600 = 1 hour)"
-    video_stream_keep_original_name: "Keep the original video file name on Cloudflare Stream (when disabled, videos are uploaded without file names for privacy)"
-    video_stream_intercept_native_uploads: "Automatically intercept native video uploads and redirect to Cloudflare Stream"
-    video_stream_intercept_threshold_mb: "Minimum video file size (MB) to intercept and upload to Cloudflare Stream instead of standard uploads"
-    video_stream_enable_live_streams: "Enable live stream creation with RTMPS broadcasting support"
+    video_stream_keep_original_name: "Keep the original video file name on the streaming service (when disabled, videos are uploaded without file names for privacy)"
+    video_stream_intercept_native_uploads: "Automatically intercept native video uploads and redirect to video stream service"
+    video_stream_intercept_threshold_mb: "Minimum video file size (MB) to intercept and upload to streaming service instead of standard uploads"
+    video_stream_enable_live_streams: "Enable live stream creation with RTMP/RTMPS broadcasting support"
   video_stream:
     errors:
       misconfigured: "Video streaming is not configured yet. Please update the site settings and try again."
