@@ -8,7 +8,7 @@ module DiscourseVideoStream
 
     CF_API_PATH =
       "https://api.cloudflare.com/client/v4/accounts/%{account_id}/stream?direct_user=true"
-    MAX_DURATION_SECONDS = 300
+    DEFAULT_MAX_DURATION_SECONDS = 300
     DEFAULT_TUS_VERSION = "1.0.0"
 
     # @!method self.call(upload_length:, upload_metadata:, upload_defer_length:, tus_resumable:, creator_id:)
@@ -91,7 +91,8 @@ module DiscourseVideoStream
       metadata = parse_metadata(raw_metadata)
 
       unless metadata.key?("maxDurationSeconds")
-        metadata["maxDurationSeconds"] = Base64.strict_encode64(MAX_DURATION_SECONDS.to_s)
+        max_duration = SiteSetting.video_stream_max_duration.presence || DEFAULT_MAX_DURATION_SECONDS
+        metadata["maxDurationSeconds"] = Base64.strict_encode64(max_duration.to_s)
       end
 
       metadata.map { |key, value| value.present? ? "#{key} #{value}" : key }.join(",")

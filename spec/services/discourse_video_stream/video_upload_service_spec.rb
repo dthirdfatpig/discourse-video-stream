@@ -31,6 +31,8 @@ RSpec.describe DiscourseVideoStream::VideoUploadService do
     end
 
     it "returns upload details when Cloudflare succeeds" do
+      SiteSetting.video_stream_max_duration = 600
+
       headers = {
         "Location" => "https://upload.videodelivery.net/tus/abc123",
         "stream-media-id" => "abc123",
@@ -53,7 +55,7 @@ RSpec.describe DiscourseVideoStream::VideoUploadService do
         hash_including(
           "Authorization" => "Bearer #{api_token}",
           "Upload-Length" => service_params[:upload_length],
-          "Upload-Metadata" => include(Base64.strict_encode64("300")),
+          "Upload-Metadata" => include(Base64.strict_encode64("600")),
         ),
       )
     end
