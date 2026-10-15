@@ -24,6 +24,16 @@
       color: var(--primary-medium);
     }
 
+    .video-stream-keep-name-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5em;
+      cursor: pointer;
+      font-size: 0.95em;
+      color: var(--primary);
+      user-select: none;
+    }
+
     .btn-primary {
       display: inline-flex;
       align-items: center;

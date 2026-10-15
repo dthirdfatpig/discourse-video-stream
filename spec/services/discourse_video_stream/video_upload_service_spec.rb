@@ -60,6 +60,30 @@ RSpec.describe DiscourseVideoStream::VideoUploadService do
       )
     end
 
+    it "maps filename to name when video_stream_keep_original_name is enabled" do
+      SiteSetting.video_stream_keep_original_name = true
+
+      headers = {
+        "Location" => "https://upload.videodelivery.net/tus/abc123",
+        "stream-media-id" => "abc123",
+        "tus-resumable" => "1.0.0",
+      }
+      response = instance_double(Faraday::Response, status: 201, body: nil, headers: headers)
+      allow(Faraday).to receive(:post).and_return(response)
+
+      params = service_params.merge(upload_metadata: "filename ZmlsZS5tcDQ=")
+      context = described_class.call(params: params)
+
+      expect(context.success?).to eq(true)
+      expect(Faraday).to have_received(:post).with(
+        format(described_class::CF_API_PATH, account_id: account_id),
+        nil,
+        hash_including(
+          "Upload-Metadata" => include("name ZmlsZS5tcDQ="),
+        ),
+      )
+    end
+
     it "fails when Cloudflare returns an error" do
       response =
         instance_double(

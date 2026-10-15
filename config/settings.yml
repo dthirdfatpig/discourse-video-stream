@@ -24,6 +24,9 @@ plugins:
     client: false
     min: 1
     max: 21600
+  video_stream_keep_original_name:
+    default: false
+    client: true
   video_stream_intercept_native_uploads:
     default: true
     client: true

@@ -95,6 +95,10 @@ module DiscourseVideoStream
         metadata["maxDurationSeconds"] = Base64.strict_encode64(max_duration.to_s)
       end
 
+      if SiteSetting.video_stream_keep_original_name && metadata.key?("filename") && !metadata.key?("name")
+        metadata["name"] = metadata["filename"]
+      end
+
       metadata.map { |key, value| value.present? ? "#{key} #{value}" : key }.join(",")
     end
 

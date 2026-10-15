@@ -7,6 +7,7 @@ en:
     video_stream_allowed_extensions: "Comma-separated list of allowed video file extensions"
     video_stream_max_file_size: "Maximum allowed video file size in megabytes"
     video_stream_max_duration: "Maximum allowed video duration in seconds (e.g. 300 = 5 minutes, 3600 = 1 hour)"
+    video_stream_keep_original_name: "Keep the original video file name on Cloudflare Stream (when disabled, videos are uploaded without file names for privacy)"
     video_stream_intercept_native_uploads: "Automatically intercept native video uploads and redirect to Cloudflare Stream"
     video_stream_intercept_threshold_mb: "Minimum video file size (MB) to intercept and upload to Cloudflare Stream instead of standard uploads"
     video_stream_enable_live_streams: "Enable live stream creation with RTMPS broadcasting support"

@@ -10,6 +10,7 @@ en:
       upload_failed: "Failed to upload video. Please try again."
       upload_progress: "Uploading video... %{progress}%"
       upload_description: "Select a video file to upload directly to Cloudflare Stream."
+      keep_original_name: "Keep original file name"
       invalid_extension: "Only the following video formats are allowed: %{extensions}"
       file_too_large: "The selected file exceeds the %{max_size_mb} MB limit."
       subdomain_missing: "Video streaming is not fully configured yet. Please contact site staff."
