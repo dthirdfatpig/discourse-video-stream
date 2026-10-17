@@ -58,8 +58,7 @@ export default class LiveStreamModal extends Component {
       return;
     }
 
-    const provider = this.siteSettings.video_stream_provider || "cloudflare";
-    const bbcode = `\n\n[video-stream id="${uid}" provider="${provider}"]\n[/video-stream]\n\n`;
+    const bbcode = `\n\n[video-stream id="${uid}"]\n[/video-stream]\n\n`;
 
     toolbarEvent.addText(bbcode);
     this.args.closeModal?.();
