@@ -9,6 +9,13 @@ function isValidVideoId(videoId) {
   return videoId && /^[a-zA-Z0-9_-]+$/.test(videoId);
 }
 
+function isValidProvider(provider) {
+  return (
+    typeof provider === "string" &&
+    ["cloudflare", "bunny"].includes(provider.trim().toLowerCase())
+  );
+}
+
 const blockRule = {
   tag: "video-stream",
 
@@ -19,10 +26,17 @@ const blockRule = {
       return false;
     }
 
-    token.attrs = [
+    const attrs = [
       ["class", "video-stream-container"],
       ["data-video-id", videoId],
     ];
+
+    const provider = tagInfo.attrs?.provider;
+    if (isValidProvider(provider)) {
+      attrs.push(["data-provider", provider.trim().toLowerCase()]);
+    }
+
+    token.attrs = attrs;
 
     return true;
   },
@@ -38,8 +52,13 @@ const inlineRule = {
       return false;
     }
 
+    const provider = tagInfo.attrs?.provider;
+    const providerAttr = isValidProvider(provider)
+      ? ` data-provider="${provider.trim().toLowerCase()}"`
+      : "";
+
     let token = state.push("html_inline", "", 0);
-    token.content = `<div class="video-stream-container" data-video-id="${videoId}"></div>`;
+    token.content = `<div class="video-stream-container" data-video-id="${videoId}"${providerAttr}></div>`;
 
     return true;
   },
@@ -49,6 +68,7 @@ export function setup(helper) {
   helper.allowList([
     "div.video-stream-container",
     "div[data-video-id]",
+    "div[data-provider]",
     "video.video-stream-player",
     "video[controls]",
     "video[autoplay]",

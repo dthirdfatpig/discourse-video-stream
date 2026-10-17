@@ -213,7 +213,7 @@ export default class VideoUploadModal extends Component {
   }
 
   /**
-   * @param {{ uid: string }} result
+   * @param {{ uid: string, provider?: string }} result
    */
   insertEmbed(result) {
     const toolbarEvent = this.args.model?.toolbarEvent;
@@ -224,7 +224,9 @@ export default class VideoUploadModal extends Component {
     }
 
     const uid = result.uid;
-    const bbcode = `\n\n[video-stream id="${uid}"]\n[/video-stream]\n\n`;
+    const provider =
+      result.provider || this.siteSettings.video_stream_provider || "cloudflare";
+    const bbcode = `\n\n[video-stream id="${uid}" provider="${provider}"]\n[/video-stream]\n\n`;
 
     toolbarEvent.addText(bbcode);
     this.args.closeModal?.();
@@ -280,7 +282,7 @@ export default class VideoUploadModal extends Component {
         }
       },
       onSuccess: () => {
-        this._handleUploadSuccess({ uploadURL: upload.url, videoId });
+        this._handleUploadSuccess({ uploadURL: upload.url, videoId, provider });
       },
       onError: (error) => {
         this._handleUploadFailure(error);
@@ -343,7 +345,12 @@ export default class VideoUploadModal extends Component {
       return;
     }
 
-    this.insertEmbed({ uid });
+    const provider =
+      response?.provider ||
+      this.siteSettings.video_stream_provider ||
+      "cloudflare";
+
+    this.insertEmbed({ uid, provider });
     this.resetUploaderState();
   }
 

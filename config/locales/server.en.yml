@@ -1,7 +1,7 @@
 en:
   site_settings:
     video_stream_enabled: "Enable video uploads and playback"
-    video_stream_provider: "Streaming service provider to use for uploads and playback"
+    video_stream_provider: "Active streaming service provider for new uploads (playback supports both Cloudflare and Bunny simultaneously)"
     video_stream_account_id: "Your Cloudflare Account ID (found in Cloudflare Dashboard URL)"
     video_stream_api_token: "Your Cloudflare API Token with Stream permissions"
     video_stream_customer_subdomain: "Your Cloudflare Stream playback subdomain (without https://, e.g. customer-xxxxx.cloudflarestream.com)"

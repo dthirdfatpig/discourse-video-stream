@@ -15,6 +15,7 @@ import { i18n } from "discourse-i18n";
  */
 export default class LiveStreamModal extends Component {
   @service toasts;
+  @service siteSettings;
 
   /**
    * @type {boolean}
@@ -57,7 +58,8 @@ export default class LiveStreamModal extends Component {
       return;
     }
 
-    const bbcode = `\n\n[video-stream id="${uid}"]\n[/video-stream]\n\n`;
+    const provider = this.siteSettings.video_stream_provider || "cloudflare";
+    const bbcode = `\n\n[video-stream id="${uid}" provider="${provider}"]\n[/video-stream]\n\n`;
 
     toolbarEvent.addText(bbcode);
     this.args.closeModal?.();

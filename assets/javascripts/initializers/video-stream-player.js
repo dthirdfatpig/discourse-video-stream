@@ -1,18 +1,88 @@
 import loadScript from "discourse/lib/load-script";
 import { withPluginApi } from "discourse/lib/plugin-api";
 
+function cleanDomain(domain) {
+  if (!domain) {
+    return "";
+  }
+  return domain
+    .trim()
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "");
+}
+
+/**
+ * Build an ordered list of candidate playback sources for a video.
+ * If provider is specified in data-provider, that provider is prioritized.
+ * If not specified, standard UUIDs with hyphens prioritize Bunny, otherwise
+ * the currently active panel provider is tried first, followed by the other.
+ *
+ * @param {string} videoId
+ * @param {string} [explicitProvider]
+ * @param {object} siteSettings
+ * @returns {Array<{ provider: string, manifestUri: string, poster: string }>}
+ */
+function getPlaybackSources(videoId, explicitProvider, siteSettings) {
+  const cloudflareDomain = cleanDomain(
+    siteSettings.video_stream_customer_subdomain
+  );
+  const bunnyDomain = cleanDomain(siteSettings.video_stream_bunny_hostname);
+  const defaultProvider = siteSettings.video_stream_provider || "cloudflare";
+
+  const bunnySources = bunnyDomain
+    ? [
+        {
+          provider: "bunny",
+          manifestUri: `https://${bunnyDomain}/${videoId}/playlist.m3u8`,
+          poster: `https://${bunnyDomain}/${videoId}/thumbnail.jpg`,
+        },
+      ]
+    : [];
+
+  const cloudflareSources = cloudflareDomain
+    ? [
+        {
+          provider: "cloudflare",
+          manifestUri: `https://${cloudflareDomain}/${videoId}/manifest/video.mpd`,
+          poster: `https://${cloudflareDomain}/${videoId}/thumbnails/thumbnail.jpg`,
+        },
+        {
+          provider: "cloudflare",
+          manifestUri: `https://${cloudflareDomain}/${videoId}/manifest/video.m3u8`,
+          poster: `https://${cloudflareDomain}/${videoId}/thumbnails/thumbnail.jpg`,
+        },
+      ]
+    : [];
+
+  let preferredProvider;
+  if (explicitProvider === "bunny" || explicitProvider === "cloudflare") {
+    preferredProvider = explicitProvider;
+  } else if (videoId.includes("-")) {
+    // Standard UUIDs with hyphens are characteristic of Bunny Stream GUIDs
+    preferredProvider = "bunny";
+  } else {
+    preferredProvider = defaultProvider;
+  }
+
+  if (preferredProvider === "bunny") {
+    return [...bunnySources, ...cloudflareSources];
+  } else {
+    return [...cloudflareSources, ...bunnySources];
+  }
+}
+
 /**
  * Initialize Shaka Player for a video element
  * @param {HTMLElement} container - The video container element
  * @param {string} videoId
- * @param {string} customerSubdomain
- * @param {string} [provider]
+ * @param {Array<{ provider: string, manifestUri: string, poster: string }>} sources
+ * @param {HTMLVideoElement} videoElement
  */
 async function initializeShakaPlayer(
   container,
   videoId,
-  customerSubdomain,
-  provider = "cloudflare"
+  sources,
+  videoElement
 ) {
   try {
     // Load Shaka Player UI library (includes base player + UI) and CSS from vendored assets
@@ -33,7 +103,6 @@ async function initializeShakaPlayer(
       return;
     }
 
-    const videoElement = container.querySelector("video");
     if (!videoElement) {
       return;
     }
@@ -75,54 +144,49 @@ async function initializeShakaPlayer(
 
     ui.configure(config);
 
-    // Determine manifest URIs based on provider
-    let primaryManifestUri;
-    let fallbackManifestUri;
+    // Try playback sources in order until one succeeds
+    let successfulSource = null;
+    let lastError = null;
 
-    if (provider === "bunny") {
-      primaryManifestUri = `https://${customerSubdomain}/${videoId}/playlist.m3u8`;
-    } else {
-      primaryManifestUri = `https://${customerSubdomain}/${videoId}/manifest/video.mpd`;
-      fallbackManifestUri = `https://${customerSubdomain}/${videoId}/manifest/video.m3u8`;
+    for (let i = 0; i < sources.length; i++) {
+      const source = sources[i];
+      try {
+        if (i > 0) {
+          await player.unload(false).catch(() => {});
+        }
+        await player.load(source.manifestUri);
+        successfulSource = source;
+        break;
+      } catch (loadError) {
+        lastError = loadError;
+      }
     }
 
-    try {
-      await player.load(primaryManifestUri);
-    } catch (primaryError) {
-      if (fallbackManifestUri) {
-        // eslint-disable-next-line no-console
-        console.warn("Primary manifest failed, trying fallback:", primaryError);
-        try {
-          await player.load(fallbackManifestUri);
-        } catch (fallbackError) {
-          // eslint-disable-next-line no-console
-          console.error("Both primary and fallback manifests failed:", {
-            primary: primaryError,
-            fallback: fallbackError,
-          });
-          container.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 2em; text-align: center; color: var(--primary-medium);">
-              <div>
-                <p>Failed to load video</p>
-                <p style="font-size: 0.9em; margin-top: 0.5em;">Video ID: ${videoId}</p>
-              </div>
-            </div>
-          `;
-          return;
-        }
-      } else {
-        // eslint-disable-next-line no-console
-        console.error("Failed to load manifest:", primaryError);
-        container.innerHTML = `
-          <div style="display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 2em; text-align: center; color: var(--primary-medium);">
-            <div>
-              <p>Failed to load video</p>
-              <p style="font-size: 0.9em; margin-top: 0.5em;">Video ID: ${videoId}</p>
-            </div>
+    if (!successfulSource) {
+      // eslint-disable-next-line no-console
+      console.error("All video manifest sources failed to load:", {
+        videoId,
+        lastError,
+        sources,
+      });
+      container.innerHTML = `
+        <div style="display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 2em; text-align: center; color: var(--primary-medium);">
+          <div>
+            <p>Failed to load video</p>
+            <p style="font-size: 0.9em; margin-top: 0.5em;">Video ID: ${videoId}</p>
           </div>
-        `;
-        return;
-      }
+        </div>
+      `;
+      return;
+    }
+
+    // Update poster to matching provider if different from initial
+    if (
+      videoElement &&
+      successfulSource.poster &&
+      videoElement.poster !== successfulSource.poster
+    ) {
+      videoElement.poster = successfulSource.poster;
     }
 
     // Store player and ui instances on container for cleanup
@@ -160,13 +224,12 @@ function initializeVideoStreamPlayer(api) {
         return;
       }
 
-      const provider = siteSettings.video_stream_provider || "cloudflare";
-      const customerSubdomain =
-        provider === "bunny"
-          ? siteSettings.video_stream_bunny_hostname?.trim()
-          : siteSettings.video_stream_customer_subdomain?.trim();
+      const cloudflareDomain = cleanDomain(
+        siteSettings.video_stream_customer_subdomain
+      );
+      const bunnyDomain = cleanDomain(siteSettings.video_stream_bunny_hostname);
 
-      if (!customerSubdomain) {
+      if (!cloudflareDomain && !bunnyDomain) {
         // eslint-disable-next-line no-console
         console.error(
           "Video Stream: playback domain/hostname not configured in site settings"
@@ -186,19 +249,37 @@ function initializeVideoStreamPlayer(api) {
           return;
         }
 
+        const explicitProvider = container.dataset.provider?.toLowerCase();
+        const sources = getPlaybackSources(
+          videoId,
+          explicitProvider,
+          siteSettings
+        );
+
+        if (!sources.length) {
+          container.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 2em; text-align: center; color: var(--primary-medium);">
+              <div>
+                <p>Playback not configured</p>
+                <p style="font-size: 0.9em; margin-top: 0.5em;">Video ID: ${videoId}</p>
+              </div>
+            </div>
+          `;
+          return;
+        }
+
         // Create video element (Shaka UI will manage controls)
         const video = document.createElement("video");
         video.className = "video-stream-player";
-        video.poster =
-          provider === "bunny"
-            ? `https://${customerSubdomain}/${videoId}/thumbnail.jpg`
-            : `https://${customerSubdomain}/${videoId}/thumbnails/thumbnail.jpg`;
+        if (sources[0]?.poster) {
+          video.poster = sources[0].poster;
+        }
 
         // Add video to container
         container.appendChild(video);
 
         // Initialize Shaka Player with UI
-        initializeShakaPlayer(container, videoId, customerSubdomain, provider);
+        initializeShakaPlayer(container, videoId, sources, video);
       });
     },
     {

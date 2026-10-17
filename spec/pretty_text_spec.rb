@@ -137,5 +137,32 @@ describe PrettyText do
       expect(cooked).to include('data-video-id="block1"')
       expect(cooked.scan(/<div class="video-stream-container"/).count).to eq(2)
     end
+
+    it "preserves bunny provider attribute when present in BBCode" do
+      markdown = '[video-stream id="bunny123" provider="bunny"][/video-stream]'
+      cooked = PrettyText.cook(markdown)
+
+      expect(cooked).to include('<div class="video-stream-container"')
+      expect(cooked).to include('data-video-id="bunny123"')
+      expect(cooked).to include('data-provider="bunny"')
+    end
+
+    it "preserves cloudflare provider attribute when present in BBCode" do
+      markdown = '[video-stream id="cf123" provider="cloudflare"][/video-stream]'
+      cooked = PrettyText.cook(markdown)
+
+      expect(cooked).to include('<div class="video-stream-container"')
+      expect(cooked).to include('data-video-id="cf123"')
+      expect(cooked).to include('data-provider="cloudflare"')
+    end
+
+    it "ignores invalid provider attributes" do
+      markdown = '[video-stream id="test123" provider="invalid"][/video-stream]'
+      cooked = PrettyText.cook(markdown)
+
+      expect(cooked).to include('<div class="video-stream-container"')
+      expect(cooked).to include('data-video-id="test123"')
+      expect(cooked).not_to include("data-provider")
+    end
   end
 end
