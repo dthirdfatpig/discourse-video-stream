@@ -97,29 +97,160 @@ function getPlaybackSources(videoId, explicitProvider, siteSettings) {
 }
 
 /**
- * Download helper to trigger file download in browser
- * @param {string} url
- * @param {string} filename
+ * Check if the player container or its contents are currently in fullscreen mode
+ * @param {HTMLElement} container
+ * @returns {boolean}
  */
-function downloadFile(url, filename) {
-  if (!url) {
+function isFullscreenActive(container) {
+  if (!container) {
+    return false;
+  }
+  const fsElem =
+    document.fullscreenElement ||
+    document.webkitFullscreenElement ||
+    document.mozFullScreenElement ||
+    document.msFullscreenElement;
+  if (!fsElem) {
+    return false;
+  }
+  return (
+    fsElem === container ||
+    container.contains(fsElem) ||
+    fsElem.contains(container)
+  );
+}
+
+/**
+ * Apply the selected aspect ratio sizing and object-fit to the container and video element.
+ * Works seamlessly in normal post view and inside fullscreen mode across desktop and mobile.
+ *
+ * @param {HTMLVideoElement} videoElement
+ * @param {HTMLElement} container
+ * @param {string} mode - "fit", "16:9", "4:3", "cover", "fill", "21:9"
+ */
+function applyAspectRatio(videoElement, container, mode) {
+  if (!container) {
     return;
   }
-  const a = document.createElement("a");
-  a.href = url;
-  if (filename) {
-    a.download = filename;
+  const currentMode = mode || container.dataset.aspectRatio || "fit";
+  container.dataset.aspectRatio = currentMode;
+
+  if (!videoElement) {
+    return;
   }
-  a.target = "_blank";
-  a.rel = "noopener noreferrer";
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
+
+  const inFullscreen = isFullscreenActive(container);
+
+  if (inFullscreen) {
+    container.style.removeProperty("aspect-ratio");
+  }
+
+  switch (currentMode) {
+    case "16:9": {
+      if (inFullscreen) {
+        videoElement.style.setProperty("object-fit", "fill", "important");
+        videoElement.style.setProperty(
+          "width",
+          "min(100vw, calc(100vh * 16 / 9))",
+          "important"
+        );
+        videoElement.style.setProperty(
+          "height",
+          "min(100vh, calc(100vw * 9 / 16))",
+          "important"
+        );
+      } else {
+        container.style.setProperty("aspect-ratio", "16 / 9", "important");
+        videoElement.style.setProperty("object-fit", "fill", "important");
+        videoElement.style.setProperty("width", "100%", "important");
+        videoElement.style.setProperty("height", "100%", "important");
+      }
+      break;
+    }
+    case "4:3": {
+      if (inFullscreen) {
+        videoElement.style.setProperty("object-fit", "fill", "important");
+        videoElement.style.setProperty(
+          "width",
+          "min(100vw, calc(100vh * 4 / 3))",
+          "important"
+        );
+        videoElement.style.setProperty(
+          "height",
+          "min(100vh, calc(100vw * 3 / 4))",
+          "important"
+        );
+      } else {
+        container.style.setProperty("aspect-ratio", "4 / 3", "important");
+        videoElement.style.setProperty("object-fit", "fill", "important");
+        videoElement.style.setProperty("width", "100%", "important");
+        videoElement.style.setProperty("height", "100%", "important");
+      }
+      break;
+    }
+    case "21:9": {
+      if (inFullscreen) {
+        videoElement.style.setProperty("object-fit", "fill", "important");
+        videoElement.style.setProperty(
+          "width",
+          "min(100vw, calc(100vh * 21 / 9))",
+          "important"
+        );
+        videoElement.style.setProperty(
+          "height",
+          "min(100vh, calc(100vw * 9 / 21))",
+          "important"
+        );
+      } else {
+        container.style.setProperty("aspect-ratio", "21 / 9", "important");
+        videoElement.style.setProperty("object-fit", "fill", "important");
+        videoElement.style.setProperty("width", "100%", "important");
+        videoElement.style.setProperty("height", "100%", "important");
+      }
+      break;
+    }
+    case "cover": {
+      // Zoom (Crop)
+      if (!inFullscreen) {
+        container.style.setProperty("aspect-ratio", "16 / 9", "important");
+      }
+      videoElement.style.setProperty("object-fit", "cover", "important");
+      videoElement.style.setProperty("width", "100%", "important");
+      videoElement.style.setProperty("height", "100%", "important");
+      break;
+    }
+    case "fill": {
+      // Stretch (Fill)
+      if (!inFullscreen) {
+        container.style.setProperty("aspect-ratio", "16 / 9", "important");
+      }
+      videoElement.style.setProperty("object-fit", "fill", "important");
+      videoElement.style.setProperty("width", "100%", "important");
+      videoElement.style.setProperty("height", "100%", "important");
+      break;
+    }
+    case "fit":
+    default: {
+      // Fit (Auto)
+      if (!inFullscreen) {
+        container.style.setProperty("aspect-ratio", "16 / 9", "important");
+      }
+      videoElement.style.setProperty("object-fit", "contain", "important");
+      videoElement.style.setProperty("width", "100%", "important");
+      videoElement.style.setProperty("height", "100%", "important");
+      break;
+    }
+  }
+
+  videoElement.style.setProperty("max-width", "100%", "important");
+  videoElement.style.setProperty("max-height", "100%", "important");
+  videoElement.style.setProperty("display", "block", "important");
+  videoElement.style.setProperty("margin", "auto", "important");
 }
 
 let customElementsRegistered = false;
 
-function registerCustomElements(siteSettings) {
+function registerCustomElements() {
   if (customElementsRegistered || !window.shaka?.ui) {
     return;
   }
@@ -151,6 +282,7 @@ function registerCustomElements(siteSettings) {
       ];
 
       const container = this.controls.getVideoContainer();
+      const video = this.controls.getVideo();
       const currentMode = container?.dataset?.aspectRatio || "fit";
       const initialOption =
         this.options.find((opt) => opt.id === currentMode) || this.options[0];
@@ -159,6 +291,8 @@ function registerCustomElements(siteSettings) {
         this.currentSelection.textContent = initialOption.label;
       }
       this.button.setAttribute("shaka-status", initialOption.label);
+
+      applyAspectRatio(video, container, currentMode);
 
       this.buildMenu(currentMode);
     }
@@ -192,9 +326,8 @@ function registerCustomElements(siteSettings) {
 
     selectOption(opt) {
       const container = this.controls.getVideoContainer();
-      if (container) {
-        container.dataset.aspectRatio = opt.id;
-      }
+      const video = this.controls.getVideo();
+      applyAspectRatio(video, container, opt.id);
 
       const prevIcon = this.menu.querySelector(
         ".shaka-chosen-item.material-icons-round"
@@ -236,161 +369,6 @@ function registerCustomElements(siteSettings) {
     }
   }
 
-  // Custom Download Settings Menu with available qualities
-  class DownloadSelection extends window.shaka.ui.SettingsMenu {
-    constructor(parent, controls) {
-      super(parent, controls, "file_download");
-
-      this.button.classList.add("shaka-download-button");
-      this.menu.classList.add("shaka-download-menu");
-
-      this.button.setAttribute("aria-label", "Download");
-      if (this.nameSpan) {
-        this.nameSpan.textContent = "Download";
-      }
-      if (this.backSpan) {
-        this.backSpan.textContent = "Download Quality";
-      }
-      if (this.currentSelection) {
-        this.currentSelection.textContent = "MP4";
-      }
-
-      this.eventManager.listen(this.player, "variantchanged", () => {
-        this.updateQualityOptions();
-      });
-      this.eventManager.listen(this.player, "trackschanged", () => {
-        this.updateQualityOptions();
-      });
-      this.eventManager.listen(this.button, "click", () => {
-        this.updateQualityOptions();
-      });
-
-      this.updateQualityOptions();
-    }
-
-    updateQualityOptions() {
-      const container = this.controls.getVideoContainer();
-      if (!container) {
-        return;
-      }
-      const videoId = container.dataset.videoId;
-      if (!videoId) {
-        return;
-      }
-
-      const cloudflareDomain = cleanDomain(
-        siteSettings.video_stream_customer_subdomain
-      );
-      const bunnyDomain = cleanDomain(
-        siteSettings.video_stream_bunny_hostname
-      );
-      const provider =
-        container.dataset.resolvedProvider ||
-        (videoId.includes("-")
-          ? "bunny"
-          : siteSettings.video_stream_provider || "cloudflare");
-
-      // Clear existing options except back button
-      while (this.menu.firstChild) {
-        this.menu.removeChild(this.menu.firstChild);
-      }
-      if (this.backButton) {
-        this.menu.appendChild(this.backButton);
-      }
-
-      // Determine available resolutions from player tracks
-      let heights = [];
-      try {
-        const tracks = this.player.getVariantTracks() || [];
-        heights = Array.from(
-          new Set(
-            tracks
-              .map((t) => t.height)
-              .filter((h) => typeof h === "number" && h > 0)
-          )
-        ).sort((a, b) => b - a);
-      } catch (_) {}
-
-      if (!heights.length) {
-        heights = [1080, 720, 480, 360];
-      }
-
-      const options = [];
-
-      if (provider === "bunny" && bunnyDomain) {
-        heights.forEach((h) => {
-          const qualityTag = h >= 1080 ? "Full HD" : h >= 720 ? "HD" : "SD";
-          options.push({
-            label: `${h}p (${qualityTag})`,
-            url: `https://${bunnyDomain}/${videoId}/play_${h}p.mp4`,
-            filename: `${videoId}_${h}p.mp4`,
-          });
-        });
-        options.push({
-          label: "Original File",
-          url: `https://${bunnyDomain}/${videoId}/original`,
-          filename: `${videoId}_original.mp4`,
-        });
-      } else if (cloudflareDomain) {
-        heights.forEach((h, idx) => {
-          const qualityTag = idx === 0 ? "Best Quality" : h >= 720 ? "HD" : "SD";
-          options.push({
-            label: `${h}p (${qualityTag})`,
-            url: `https://${cloudflareDomain}/${videoId}/downloads/default.mp4`,
-            filename: `${videoId}_${h}p.mp4`,
-          });
-        });
-        options.push({
-          label: "Direct MP4 (Default)",
-          url: `https://${cloudflareDomain}/${videoId}/downloads/default.mp4`,
-          filename: `${videoId}.mp4`,
-        });
-      } else if (bunnyDomain) {
-        heights.forEach((h) => {
-          options.push({
-            label: `${h}p`,
-            url: `https://${bunnyDomain}/${videoId}/play_${h}p.mp4`,
-            filename: `${videoId}_${h}p.mp4`,
-          });
-        });
-        options.push({
-          label: "Original File",
-          url: `https://${bunnyDomain}/${videoId}/original`,
-          filename: `${videoId}_original.mp4`,
-        });
-      }
-
-      options.forEach((opt) => {
-        const button = document.createElement("button");
-        button.setAttribute("type", "button");
-
-        const icon = document.createElement("i");
-        icon.classList.add("material-icons-round");
-        icon.textContent = "file_download";
-        icon.style.cssText =
-          "font-size: 1.1em; margin-right: 0.5em; opacity: 0.7;";
-        button.appendChild(icon);
-
-        const span = document.createElement("span");
-        span.textContent = opt.label;
-        button.appendChild(span);
-
-        this.eventManager.listen(button, "click", () => {
-          this.controls.hideSettingsMenus();
-          downloadFile(opt.url, opt.filename);
-        });
-
-        this.menu.appendChild(button);
-      });
-    }
-  }
-
-  class DownloadSelectionFactory {
-    create(rootElement, controls) {
-      return new DownloadSelection(rootElement, controls);
-    }
-  }
-
   window.shaka.ui.OverflowMenu.registerElement(
     "aspect_ratio",
     new AspectRatioSelectionFactory()
@@ -398,15 +376,6 @@ function registerCustomElements(siteSettings) {
   window.shaka.ui.Controls.registerElement(
     "aspect_ratio",
     new AspectRatioSelectionFactory()
-  );
-
-  window.shaka.ui.OverflowMenu.registerElement(
-    "download",
-    new DownloadSelectionFactory()
-  );
-  window.shaka.ui.Controls.registerElement(
-    "download",
-    new DownloadButtonFactory()
   );
 }
 
@@ -448,8 +417,8 @@ async function initializeShakaPlayer(
       return;
     }
 
-    // Register custom Aspect Ratio and Download UI buttons
-    registerCustomElements(siteSettings);
+    // Register custom Aspect Ratio UI button
+    registerCustomElements();
 
     // Create player instance and attach to video element
     const player = new window.shaka.Player();
@@ -476,12 +445,11 @@ async function initializeShakaPlayer(
         "overflow_menu",
         "fullscreen",
       ],
-      // Overflow menu with quality, aspect ratio, download, and playback rate
+      // Overflow menu with quality, aspect ratio, and playback rate
       overflowMenuButtons: [
         "captions",
         "quality", // Resolution selection
         "aspect_ratio", // Aspect ratio changer
-        "download", // Direct MP4 download
         "language",
         "playback_rate", // Playback speed
         "picture_in_picture",
@@ -494,7 +462,7 @@ async function initializeShakaPlayer(
     ui.configure(config);
 
     // Guard against mobile browsers (especially Firefox on Android) resetting video.currentTime to 0
-    // or pausing playback when entering/exiting native fullscreen.
+    // or pausing playback when entering/exiting native fullscreen, and ensure aspect ratio persists.
     let lastPlaybackTime = 0;
     let wasPlayingBeforeFullscreen = false;
     let isFullscreenTransition = false;
@@ -527,16 +495,33 @@ async function initializeShakaPlayer(
       }
     };
 
+    const handleFullscreenTransition = () => {
+      restorePlaybackState();
+      applyAspectRatio(
+        videoElement,
+        container,
+        container.dataset.aspectRatio || "fit"
+      );
+    };
+
     const onFullscreenChange = () => {
       isFullscreenTransition = true;
-      restorePlaybackState();
-      setTimeout(restorePlaybackState, 100);
-      setTimeout(restorePlaybackState, 250);
-      setTimeout(restorePlaybackState, 500);
+      handleFullscreenTransition();
+      setTimeout(handleFullscreenTransition, 100);
+      setTimeout(handleFullscreenTransition, 250);
+      setTimeout(handleFullscreenTransition, 500);
       setTimeout(() => {
-        restorePlaybackState();
+        handleFullscreenTransition();
         isFullscreenTransition = false;
       }, 800);
+    };
+
+    const onWindowResize = () => {
+      applyAspectRatio(
+        videoElement,
+        container,
+        container.dataset.aspectRatio || "fit"
+      );
     };
 
     videoElement.addEventListener("timeupdate", onTimeUpdate);
@@ -546,6 +531,8 @@ async function initializeShakaPlayer(
     document.addEventListener("fullscreenchange", onFullscreenChange);
     document.addEventListener("webkitfullscreenchange", onFullscreenChange);
     document.addEventListener("mozfullscreenchange", onFullscreenChange);
+    window.addEventListener("resize", onWindowResize);
+    window.addEventListener("orientationchange", onWindowResize);
 
     container._videoStreamCleanup = () => {
       videoElement.removeEventListener("timeupdate", onTimeUpdate);
@@ -554,6 +541,8 @@ async function initializeShakaPlayer(
       document.removeEventListener("fullscreenchange", onFullscreenChange);
       document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
       document.removeEventListener("mozfullscreenchange", onFullscreenChange);
+      window.removeEventListener("resize", onWindowResize);
+      window.removeEventListener("orientationchange", onWindowResize);
     };
 
     // Try playback sources in order until one succeeds
@@ -585,8 +574,15 @@ async function initializeShakaPlayer(
       return;
     }
 
-    // Set resolved provider for download helper
+    // Set resolved provider
     container.dataset.resolvedProvider = successfulSource.provider;
+
+    // Apply aspect ratio
+    applyAspectRatio(
+      videoElement,
+      container,
+      container.dataset.aspectRatio || "fit"
+    );
 
     // Update poster to matching provider if different from initial
     if (

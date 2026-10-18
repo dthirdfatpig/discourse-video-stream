@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.13] - 2026-10-18
+
+### Removed
+- **Download Feature**: Completely removed the download feature and 3-dots overflow download button for both Cloudflare Stream and Bunny.net Stream to eliminate customer subdomain exposure and ensure complete privacy.
+
+### Fixed
+- **Persistent Fullscreen Aspect Ratio Changer**: Fixed aspect ratio selection (16:9, 4:3, 21:9, Zoom/Crop, Stretch/Fill, Fit/Auto) reverting upon entering fullscreen and having no effect when changed inside fullscreen mode. Dynamic scaling and object-fit constraints are now applied via explicit inline properties and separated CSS fullscreen pseudo-classes, ensuring selections persist seamlessly across fullscreen transitions, window resizes, and device orientation changes on both Windows and Android.
+
+---
+
 ## [0.0.12] - 2026-10-18
 
 ### Added

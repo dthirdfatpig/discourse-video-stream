@@ -144,21 +144,18 @@
   video,
   video.video-stream-player,
   video.shaka-video {
-    width: 100% !important;
-    height: 100% !important;
+    width: 100%;
+    height: 100%;
     max-width: 100% !important;
     max-height: 100% !important; // Override Discourse core topic-post.scss 500px max-height constraint
-    object-fit: contain !important;
+    object-fit: contain;
     display: block !important;
     margin: auto !important;
     background: #000;
   }
 
-  // When container is placed in fullscreen (via Fullscreen API)
-  &:fullscreen,
-  &:-webkit-full-screen,
-  &:-moz-full-screen,
-  &:-ms-fullscreen {
+  // Fullscreen styling across separate rules to prevent browser selector dropping
+  &:fullscreen {
     width: 100vw !important;
     height: 100vh !important;
     max-width: 100vw !important;
@@ -171,47 +168,166 @@
     video,
     video.video-stream-player,
     video.shaka-video {
-      width: 100% !important;
-      height: 100% !important;
-      max-width: 100% !important;
-      max-height: 100% !important;
-      object-fit: contain !important;
-      margin: auto !important;
-    }
-
-    &[data-aspect-ratio="4:3"] video {
-      max-width: calc(100vh * 4 / 3) !important;
+      width: 100vw;
+      height: 100vh;
+      max-width: 100vw !important;
       max-height: 100vh !important;
-      object-fit: fill !important;
+      display: block !important;
+      margin: auto !important;
+      object-fit: contain;
     }
 
     &[data-aspect-ratio="16:9"] video {
-      max-width: calc(100vh * 16 / 9) !important;
-      max-height: 100vh !important;
+      width: min(100vw, calc(100vh * 16 / 9)) !important;
+      height: min(100vh, calc(100vw * 9 / 16)) !important;
+      object-fit: fill !important;
+    }
+
+    &[data-aspect-ratio="4:3"] video {
+      width: min(100vw, calc(100vh * 4 / 3)) !important;
+      height: min(100vh, calc(100vw * 3 / 4)) !important;
       object-fit: fill !important;
     }
 
     &[data-aspect-ratio="21:9"] video {
-      max-width: 100vw !important;
-      max-height: calc(100vw * 9 / 21) !important;
+      width: min(100vw, calc(100vh * 21 / 9)) !important;
+      height: min(100vh, calc(100vw * 9 / 21)) !important;
       object-fit: fill !important;
     }
 
     &[data-aspect-ratio="cover"] video {
-      max-width: 100% !important;
-      max-height: 100% !important;
+      width: 100vw !important;
+      height: 100vh !important;
       object-fit: cover !important;
     }
 
     &[data-aspect-ratio="fill"] video {
-      max-width: 100% !important;
-      max-height: 100% !important;
+      width: 100vw !important;
+      height: 100vh !important;
       object-fit: fill !important;
     }
 
     &[data-aspect-ratio="fit"] video {
-      max-width: 100% !important;
-      max-height: 100% !important;
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: contain !important;
+    }
+  }
+
+  &:-webkit-full-screen {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    aspect-ratio: auto !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    background: #000 !important;
+
+    video,
+    video.video-stream-player,
+    video.shaka-video {
+      width: 100vw;
+      height: 100vh;
+      max-width: 100vw !important;
+      max-height: 100vh !important;
+      display: block !important;
+      margin: auto !important;
+      object-fit: contain;
+    }
+
+    &[data-aspect-ratio="16:9"] video {
+      width: min(100vw, calc(100vh * 16 / 9)) !important;
+      height: min(100vh, calc(100vw * 9 / 16)) !important;
+      object-fit: fill !important;
+    }
+
+    &[data-aspect-ratio="4:3"] video {
+      width: min(100vw, calc(100vh * 4 / 3)) !important;
+      height: min(100vh, calc(100vw * 3 / 4)) !important;
+      object-fit: fill !important;
+    }
+
+    &[data-aspect-ratio="21:9"] video {
+      width: min(100vw, calc(100vh * 21 / 9)) !important;
+      height: min(100vh, calc(100vw * 9 / 21)) !important;
+      object-fit: fill !important;
+    }
+
+    &[data-aspect-ratio="cover"] video {
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: cover !important;
+    }
+
+    &[data-aspect-ratio="fill"] video {
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: fill !important;
+    }
+
+    &[data-aspect-ratio="fit"] video {
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: contain !important;
+    }
+  }
+
+  &:-moz-full-screen {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    aspect-ratio: auto !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    background: #000 !important;
+
+    video,
+    video.video-stream-player,
+    video.shaka-video {
+      width: 100vw;
+      height: 100vh;
+      max-width: 100vw !important;
+      max-height: 100vh !important;
+      display: block !important;
+      margin: auto !important;
+      object-fit: contain;
+    }
+
+    &[data-aspect-ratio="16:9"] video {
+      width: min(100vw, calc(100vh * 16 / 9)) !important;
+      height: min(100vh, calc(100vw * 9 / 16)) !important;
+      object-fit: fill !important;
+    }
+
+    &[data-aspect-ratio="4:3"] video {
+      width: min(100vw, calc(100vh * 4 / 3)) !important;
+      height: min(100vh, calc(100vw * 3 / 4)) !important;
+      object-fit: fill !important;
+    }
+
+    &[data-aspect-ratio="21:9"] video {
+      width: min(100vw, calc(100vh * 21 / 9)) !important;
+      height: min(100vh, calc(100vw * 9 / 21)) !important;
+      object-fit: fill !important;
+    }
+
+    &[data-aspect-ratio="cover"] video {
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: cover !important;
+    }
+
+    &[data-aspect-ratio="fill"] video {
+      width: 100vw !important;
+      height: 100vh !important;
+      object-fit: fill !important;
+    }
+
+    &[data-aspect-ratio="fit"] video {
+      width: 100vw !important;
+      height: 100vh !important;
       object-fit: contain !important;
     }
   }
@@ -238,22 +354,16 @@
     }
   }
 
-  &[data-aspect-ratio="cover"] {
-    video {
-      object-fit: cover !important;
-    }
+  &[data-aspect-ratio="cover"] video {
+    object-fit: cover !important;
   }
 
-  &[data-aspect-ratio="fill"] {
-    video {
-      object-fit: fill !important;
-    }
+  &[data-aspect-ratio="fill"] video {
+    object-fit: fill !important;
   }
 
-  &[data-aspect-ratio="fit"] {
-    video {
-      object-fit: contain !important;
-    }
+  &[data-aspect-ratio="fit"] video {
+    object-fit: contain !important;
   }
 
   // Support .shaka-video-container whether placed on container itself or as a wrapper
@@ -267,11 +377,8 @@
     justify-content: center !important;
 
     video {
-      width: 100% !important;
-      height: 100% !important;
       max-width: 100% !important;
       max-height: 100% !important;
-      object-fit: contain !important;
       margin: auto !important;
     }
   }
