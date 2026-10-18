@@ -97,17 +97,244 @@ function getPlaybackSources(videoId, explicitProvider, siteSettings) {
 }
 
 /**
+ * Download helper to trigger direct video MP4 download
+ * @param {HTMLElement} container
+ * @param {object} siteSettings
+ */
+function triggerDownload(container, siteSettings) {
+  if (!container) {
+    return;
+  }
+  const videoId = container.dataset.videoId;
+  if (!videoId) {
+    return;
+  }
+
+  const cloudflareDomain = cleanDomain(
+    siteSettings.video_stream_customer_subdomain
+  );
+  const bunnyDomain = cleanDomain(siteSettings.video_stream_bunny_hostname);
+  const provider =
+    container.dataset.resolvedProvider ||
+    (videoId.includes("-")
+      ? "bunny"
+      : siteSettings.video_stream_provider || "cloudflare");
+
+  let downloadUrl = "";
+  if (provider === "bunny" && bunnyDomain) {
+    downloadUrl = `https://${bunnyDomain}/${videoId}/play_720p.mp4`;
+  } else if (cloudflareDomain) {
+    downloadUrl = `https://${cloudflareDomain}/${videoId}/downloads/default.mp4`;
+  } else if (bunnyDomain) {
+    downloadUrl = `https://${bunnyDomain}/${videoId}/play_720p.mp4`;
+  }
+
+  if (downloadUrl) {
+    const a = document.createElement("a");
+    a.href = downloadUrl;
+    a.download = `${videoId}.mp4`;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+}
+
+let customElementsRegistered = false;
+
+function registerCustomElements(siteSettings) {
+  if (customElementsRegistered || !window.shaka?.ui) {
+    return;
+  }
+  customElementsRegistered = true;
+
+  // Custom Aspect Ratio Settings Menu
+  class AspectRatioSelection extends window.shaka.ui.SettingsMenu {
+    constructor(parent, controls) {
+      super(parent, controls, "aspect_ratio");
+
+      this.button.classList.add("shaka-aspect-ratio-button");
+      this.menu.classList.add("shaka-aspect-ratio-menu");
+
+      this.button.setAttribute("aria-label", "Aspect Ratio");
+      if (this.nameSpan) {
+        this.nameSpan.textContent = "Aspect Ratio";
+      }
+      if (this.backSpan) {
+        this.backSpan.textContent = "Aspect Ratio";
+      }
+
+      this.options = [
+        { id: "fit", label: "Fit (Auto)" },
+        { id: "16:9", label: "16:9" },
+        { id: "4:3", label: "4:3" },
+        { id: "cover", label: "Zoom (Crop)" },
+        { id: "fill", label: "Stretch (Fill)" },
+        { id: "21:9", label: "21:9" },
+      ];
+
+      const container = this.controls.getVideoContainer();
+      const currentMode = container?.dataset?.aspectRatio || "fit";
+      const initialOption =
+        this.options.find((opt) => opt.id === currentMode) || this.options[0];
+
+      if (this.currentSelection) {
+        this.currentSelection.textContent = initialOption.label;
+      }
+      this.button.setAttribute("shaka-status", initialOption.label);
+
+      this.buildMenu(currentMode);
+    }
+
+    buildMenu(selectedId) {
+      this.options.forEach((opt) => {
+        const button = document.createElement("button");
+        button.setAttribute("type", "button");
+
+        const span = document.createElement("span");
+        span.textContent = opt.label;
+        button.appendChild(span);
+
+        if (opt.id === selectedId) {
+          button.setAttribute("aria-selected", "true");
+          span.classList.add("shaka-chosen-item");
+          const checkIcon = document.createElement("i");
+          checkIcon.classList.add("material-icons-round", "shaka-chosen-item");
+          checkIcon.textContent = "done";
+          checkIcon.setAttribute("aria-hidden", "true");
+          button.appendChild(checkIcon);
+        }
+
+        this.eventManager.listen(button, "click", () => {
+          this.selectOption(opt);
+        });
+
+        this.menu.appendChild(button);
+      });
+    }
+
+    selectOption(opt) {
+      const container = this.controls.getVideoContainer();
+      if (container) {
+        container.dataset.aspectRatio = opt.id;
+      }
+
+      const prevIcon = this.menu.querySelector(
+        ".shaka-chosen-item.material-icons-round"
+      );
+      if (prevIcon) {
+        const prevButton = prevIcon.parentElement;
+        prevButton.removeAttribute("aria-selected");
+        const prevSpan = prevButton.querySelector("span");
+        if (prevSpan) {
+          prevSpan.classList.remove("shaka-chosen-item");
+        }
+        prevIcon.remove();
+      }
+
+      const buttons = this.menu.querySelectorAll("button");
+      buttons.forEach((btn) => {
+        const span = btn.querySelector("span");
+        if (span && span.textContent === opt.label) {
+          btn.setAttribute("aria-selected", "true");
+          span.classList.add("shaka-chosen-item");
+          const checkIcon = document.createElement("i");
+          checkIcon.classList.add("material-icons-round", "shaka-chosen-item");
+          checkIcon.textContent = "done";
+          checkIcon.setAttribute("aria-hidden", "true");
+          btn.appendChild(checkIcon);
+        }
+      });
+
+      if (this.currentSelection) {
+        this.currentSelection.textContent = opt.label;
+      }
+      this.button.setAttribute("shaka-status", opt.label);
+    }
+  }
+
+  class AspectRatioSelectionFactory {
+    create(rootElement, controls) {
+      return new AspectRatioSelection(rootElement, controls);
+    }
+  }
+
+  // Custom Download Button
+  class DownloadButton extends window.shaka.ui.Element {
+    constructor(parent, controls) {
+      super(parent, controls);
+
+      const button = document.createElement("button");
+      button.classList.add("shaka-overflow-button", "shaka-download-button");
+      button.setAttribute("type", "button");
+      button.setAttribute("aria-label", "Download");
+
+      const icon = document.createElement("i");
+      icon.classList.add("material-icons-round");
+      icon.textContent = "file_download";
+      button.appendChild(icon);
+
+      const label = document.createElement("label");
+      label.classList.add(
+        "shaka-overflow-button-label",
+        "shaka-overflow-menu-only"
+      );
+
+      const nameSpan = document.createElement("span");
+      nameSpan.textContent = "Download";
+      label.appendChild(nameSpan);
+
+      button.appendChild(label);
+      this.parent.appendChild(button);
+
+      this.eventManager.listen(button, "click", () => {
+        this.controls.hideSettingsMenus();
+        const container = this.controls.getVideoContainer();
+        triggerDownload(container, siteSettings);
+      });
+    }
+  }
+
+  class DownloadButtonFactory {
+    create(rootElement, controls) {
+      return new DownloadButton(rootElement, controls);
+    }
+  }
+
+  window.shaka.ui.OverflowMenu.registerElement(
+    "aspect_ratio",
+    new AspectRatioSelectionFactory()
+  );
+  window.shaka.ui.Controls.registerElement(
+    "aspect_ratio",
+    new AspectRatioSelectionFactory()
+  );
+
+  window.shaka.ui.OverflowMenu.registerElement(
+    "download",
+    new DownloadButtonFactory()
+  );
+  window.shaka.ui.Controls.registerElement(
+    "download",
+    new DownloadButtonFactory()
+  );
+}
+
+/**
  * Initialize Shaka Player for a video element
  * @param {HTMLElement} container - The video container element
  * @param {string} videoId
  * @param {Array<{ provider: string, manifestUri: string, poster: string }>} sources
  * @param {HTMLVideoElement} videoElement
+ * @param {object} siteSettings
  */
 async function initializeShakaPlayer(
   container,
   videoId,
   sources,
-  videoElement
+  videoElement,
+  siteSettings
 ) {
   try {
     // Load Shaka Player UI library (includes base player + UI) and CSS from vendored assets
@@ -131,6 +358,9 @@ async function initializeShakaPlayer(
     if (!videoElement) {
       return;
     }
+
+    // Register custom Aspect Ratio and Download UI buttons
+    registerCustomElements(siteSettings);
 
     // Create player instance and attach to video element
     const player = new window.shaka.Player();
@@ -157,10 +387,12 @@ async function initializeShakaPlayer(
         "overflow_menu",
         "fullscreen",
       ],
-      // Overflow menu with quality and playback rate
+      // Overflow menu with quality, aspect ratio, download, and playback rate
       overflowMenuButtons: [
         "captions",
         "quality", // Resolution selection
+        "aspect_ratio", // Aspect ratio changer
+        "download", // Direct MP4 download
         "language",
         "playback_rate", // Playback speed
         "picture_in_picture",
@@ -264,6 +496,9 @@ async function initializeShakaPlayer(
       return;
     }
 
+    // Set resolved provider for download helper
+    container.dataset.resolvedProvider = successfulSource.provider;
+
     // Update poster to matching provider if different from initial
     if (
       videoElement &&
@@ -351,7 +586,7 @@ function initializeVideoStreamPlayer(api) {
         container.appendChild(video);
 
         // Initialize Shaka Player with UI
-        initializeShakaPlayer(container, videoId, sources, video);
+        initializeShakaPlayer(container, videoId, sources, video, siteSettings);
       });
     },
     {

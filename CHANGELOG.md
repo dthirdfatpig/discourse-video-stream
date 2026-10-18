@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.11] - 2026-10-18
+
+### Added
+- **Download Button in Overflow Menu**: Added a "Download" button to the player's 3-dot overflow menu (`file_download` icon), triggering direct MP4 video downloads for both Bunny.net Stream and Cloudflare Stream.
+- **Aspect Ratio Selector in Overflow Menu**: Added an "Aspect Ratio" submenu to the 3-dot overflow menu allowing users to switch dynamically between Fit (Auto), 16:9 (Widescreen), 4:3 (Standard), Zoom (Crop), Stretch (Fill), and 21:9 (Cinema) in both post embed view and fullscreen mode.
+
+---
+
 ## [0.0.10] - 2026-10-18
 
 ### Changed
