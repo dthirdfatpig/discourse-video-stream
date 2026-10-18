@@ -97,48 +97,24 @@ function getPlaybackSources(videoId, explicitProvider, siteSettings) {
 }
 
 /**
- * Download helper to trigger direct video MP4 download
- * @param {HTMLElement} container
- * @param {object} siteSettings
+ * Download helper to trigger file download in browser
+ * @param {string} url
+ * @param {string} filename
  */
-function triggerDownload(container, siteSettings) {
-  if (!container) {
+function downloadFile(url, filename) {
+  if (!url) {
     return;
   }
-  const videoId = container.dataset.videoId;
-  if (!videoId) {
-    return;
+  const a = document.createElement("a");
+  a.href = url;
+  if (filename) {
+    a.download = filename;
   }
-
-  const cloudflareDomain = cleanDomain(
-    siteSettings.video_stream_customer_subdomain
-  );
-  const bunnyDomain = cleanDomain(siteSettings.video_stream_bunny_hostname);
-  const provider =
-    container.dataset.resolvedProvider ||
-    (videoId.includes("-")
-      ? "bunny"
-      : siteSettings.video_stream_provider || "cloudflare");
-
-  let downloadUrl = "";
-  if (provider === "bunny" && bunnyDomain) {
-    downloadUrl = `https://${bunnyDomain}/${videoId}/play_720p.mp4`;
-  } else if (cloudflareDomain) {
-    downloadUrl = `https://${cloudflareDomain}/${videoId}/downloads/default.mp4`;
-  } else if (bunnyDomain) {
-    downloadUrl = `https://${bunnyDomain}/${videoId}/play_720p.mp4`;
-  }
-
-  if (downloadUrl) {
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = `${videoId}.mp4`;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
+  a.target = "_blank";
+  a.rel = "noopener noreferrer";
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 let customElementsRegistered = false;
@@ -260,45 +236,158 @@ function registerCustomElements(siteSettings) {
     }
   }
 
-  // Custom Download Button
-  class DownloadButton extends window.shaka.ui.Element {
+  // Custom Download Settings Menu with available qualities
+  class DownloadSelection extends window.shaka.ui.SettingsMenu {
     constructor(parent, controls) {
-      super(parent, controls);
+      super(parent, controls, "file_download");
 
-      const button = document.createElement("button");
-      button.classList.add("shaka-overflow-button", "shaka-download-button");
-      button.setAttribute("type", "button");
-      button.setAttribute("aria-label", "Download");
+      this.button.classList.add("shaka-download-button");
+      this.menu.classList.add("shaka-download-menu");
 
-      const icon = document.createElement("i");
-      icon.classList.add("material-icons-round");
-      icon.textContent = "file_download";
-      button.appendChild(icon);
+      this.button.setAttribute("aria-label", "Download");
+      if (this.nameSpan) {
+        this.nameSpan.textContent = "Download";
+      }
+      if (this.backSpan) {
+        this.backSpan.textContent = "Download Quality";
+      }
+      if (this.currentSelection) {
+        this.currentSelection.textContent = "MP4";
+      }
 
-      const label = document.createElement("label");
-      label.classList.add(
-        "shaka-overflow-button-label",
-        "shaka-overflow-menu-only"
+      this.eventManager.listen(this.player, "variantchanged", () => {
+        this.updateQualityOptions();
+      });
+      this.eventManager.listen(this.player, "trackschanged", () => {
+        this.updateQualityOptions();
+      });
+      this.eventManager.listen(this.button, "click", () => {
+        this.updateQualityOptions();
+      });
+
+      this.updateQualityOptions();
+    }
+
+    updateQualityOptions() {
+      const container = this.controls.getVideoContainer();
+      if (!container) {
+        return;
+      }
+      const videoId = container.dataset.videoId;
+      if (!videoId) {
+        return;
+      }
+
+      const cloudflareDomain = cleanDomain(
+        siteSettings.video_stream_customer_subdomain
       );
+      const bunnyDomain = cleanDomain(
+        siteSettings.video_stream_bunny_hostname
+      );
+      const provider =
+        container.dataset.resolvedProvider ||
+        (videoId.includes("-")
+          ? "bunny"
+          : siteSettings.video_stream_provider || "cloudflare");
 
-      const nameSpan = document.createElement("span");
-      nameSpan.textContent = "Download";
-      label.appendChild(nameSpan);
+      // Clear existing options except back button
+      while (this.menu.firstChild) {
+        this.menu.removeChild(this.menu.firstChild);
+      }
+      if (this.backButton) {
+        this.menu.appendChild(this.backButton);
+      }
 
-      button.appendChild(label);
-      this.parent.appendChild(button);
+      // Determine available resolutions from player tracks
+      let heights = [];
+      try {
+        const tracks = this.player.getVariantTracks() || [];
+        heights = Array.from(
+          new Set(
+            tracks
+              .map((t) => t.height)
+              .filter((h) => typeof h === "number" && h > 0)
+          )
+        ).sort((a, b) => b - a);
+      } catch (_) {}
 
-      this.eventManager.listen(button, "click", () => {
-        this.controls.hideSettingsMenus();
-        const container = this.controls.getVideoContainer();
-        triggerDownload(container, siteSettings);
+      if (!heights.length) {
+        heights = [1080, 720, 480, 360];
+      }
+
+      const options = [];
+
+      if (provider === "bunny" && bunnyDomain) {
+        heights.forEach((h) => {
+          const qualityTag = h >= 1080 ? "Full HD" : h >= 720 ? "HD" : "SD";
+          options.push({
+            label: `${h}p (${qualityTag})`,
+            url: `https://${bunnyDomain}/${videoId}/play_${h}p.mp4`,
+            filename: `${videoId}_${h}p.mp4`,
+          });
+        });
+        options.push({
+          label: "Original File",
+          url: `https://${bunnyDomain}/${videoId}/original`,
+          filename: `${videoId}_original.mp4`,
+        });
+      } else if (cloudflareDomain) {
+        heights.forEach((h, idx) => {
+          const qualityTag = idx === 0 ? "Best Quality" : h >= 720 ? "HD" : "SD";
+          options.push({
+            label: `${h}p (${qualityTag})`,
+            url: `https://${cloudflareDomain}/${videoId}/downloads/default.mp4`,
+            filename: `${videoId}_${h}p.mp4`,
+          });
+        });
+        options.push({
+          label: "Direct MP4 (Default)",
+          url: `https://${cloudflareDomain}/${videoId}/downloads/default.mp4`,
+          filename: `${videoId}.mp4`,
+        });
+      } else if (bunnyDomain) {
+        heights.forEach((h) => {
+          options.push({
+            label: `${h}p`,
+            url: `https://${bunnyDomain}/${videoId}/play_${h}p.mp4`,
+            filename: `${videoId}_${h}p.mp4`,
+          });
+        });
+        options.push({
+          label: "Original File",
+          url: `https://${bunnyDomain}/${videoId}/original`,
+          filename: `${videoId}_original.mp4`,
+        });
+      }
+
+      options.forEach((opt) => {
+        const button = document.createElement("button");
+        button.setAttribute("type", "button");
+
+        const icon = document.createElement("i");
+        icon.classList.add("material-icons-round");
+        icon.textContent = "file_download";
+        icon.style.cssText =
+          "font-size: 1.1em; margin-right: 0.5em; opacity: 0.7;";
+        button.appendChild(icon);
+
+        const span = document.createElement("span");
+        span.textContent = opt.label;
+        button.appendChild(span);
+
+        this.eventManager.listen(button, "click", () => {
+          this.controls.hideSettingsMenus();
+          downloadFile(opt.url, opt.filename);
+        });
+
+        this.menu.appendChild(button);
       });
     }
   }
 
-  class DownloadButtonFactory {
+  class DownloadSelectionFactory {
     create(rootElement, controls) {
-      return new DownloadButton(rootElement, controls);
+      return new DownloadSelection(rootElement, controls);
     }
   }
 
@@ -313,7 +402,7 @@ function registerCustomElements(siteSettings) {
 
   window.shaka.ui.OverflowMenu.registerElement(
     "download",
-    new DownloadButtonFactory()
+    new DownloadSelectionFactory()
   );
   window.shaka.ui.Controls.registerElement(
     "download",

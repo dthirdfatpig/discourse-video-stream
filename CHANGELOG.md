@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.12] - 2026-10-18
+
+### Added
+- **Multi-Quality Download Submenu**: Upgraded the 3-dot overflow menu "Download" option into an interactive submenu that inspects the video manifest's active variant tracks and presents all available resolutions (1080p Full HD, 720p HD, 480p SD, 360p, Original File / Best Quality) for both Bunny.net Stream and Cloudflare Stream. Clicking any resolution directly triggers the download for that specific quality rendition.
+
+---
+
 ## [0.0.11] - 2026-10-18
 
 ### Added
