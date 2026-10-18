@@ -124,6 +124,9 @@
   }
 }
 
+// Override Discourse's topic-post.scss constraints (.cooked video has max-height: 500px)
+.topic-body .cooked .video-stream-container,
+.cooked .video-stream-container,
 .video-stream-container {
   width: 100%;
   max-width: 100%;
@@ -133,29 +136,67 @@
   overflow: hidden;
   position: relative;
   aspect-ratio: 16/9;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
 
-  .video-stream-player {
-    width: 100%;
-    height: 100%;
-    display: block;
+  // Video element styles - override Discourse's .cooked video constraints
+  video,
+  video.video-stream-player,
+  video.shaka-video {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: 100% !important;
+    max-height: 100% !important; // Override Discourse core topic-post.scss 500px max-height constraint
+    object-fit: contain !important;
+    display: block !important;
+    margin: auto !important;
     background: #000;
   }
 
-  // Shaka Player creates a wrapper around the video element
-  // This wrapper needs proper positioning to overlay controls
+  // When container is placed in fullscreen (via Fullscreen API)
+  &:fullscreen,
+  &:-webkit-full-screen,
+  &:-moz-full-screen,
+  &:-ms-fullscreen {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: 100vw !important;
+    max-height: 100vh !important;
+    aspect-ratio: auto !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    background: #000 !important;
+
+    video,
+    video.video-stream-player,
+    video.shaka-video {
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
+      object-fit: contain !important;
+      margin: auto !important;
+    }
+  }
+
+  // Support .shaka-video-container whether placed on container itself or as a wrapper
+  &.shaka-video-container,
   .shaka-video-container {
     width: 100%;
     height: 100%;
     position: relative !important;
     display: flex !important;
-    align-items: center;
-    justify-content: center;
+    align-items: center !important;
+    justify-content: center !important;
 
     video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      max-height: none; // Override Discourse's topic-post.scss max-height constraint
+      width: 100% !important;
+      height: 100% !important;
+      max-width: 100% !important;
+      max-height: 100% !important;
+      object-fit: contain !important;
+      margin: auto !important;
     }
   }
 

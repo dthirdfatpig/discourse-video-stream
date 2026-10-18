@@ -1,9 +1,6 @@
 import loadScript from "discourse/lib/load-script";
 import { withPluginApi } from "discourse/lib/plugin-api";
 
-// In-memory cache of resolved providers per videoId to eliminate redundant fallback network requests
-const RESOLVED_PROVIDER_CACHE = new Map();
-
 function cleanDomain(domain) {
   if (!domain) {
     return "";
@@ -42,7 +39,6 @@ function renderErrorMessage(container, message, videoId) {
 /**
  * Build an ordered list of candidate playback sources for a video.
  * If provider is specified in data-provider, that provider is prioritized.
- * If cached from a previous successful load in this session, the cached provider is prioritized.
  * If not specified, standard UUIDs with hyphens prioritize Bunny, otherwise
  * the currently active panel provider is tried first, followed by the other.
  *
@@ -86,8 +82,6 @@ function getPlaybackSources(videoId, explicitProvider, siteSettings) {
   let preferredProvider;
   if (explicitProvider === "bunny" || explicitProvider === "cloudflare") {
     preferredProvider = explicitProvider;
-  } else if (RESOLVED_PROVIDER_CACHE.has(videoId)) {
-    preferredProvider = RESOLVED_PROVIDER_CACHE.get(videoId);
   } else if (videoId.includes("-")) {
     // Standard UUIDs with hyphens are characteristic of Bunny Stream GUIDs
     preferredProvider = "bunny";
@@ -150,6 +144,9 @@ async function initializeShakaPlayer(
     const config = {
       addBigPlayButton: true,
       addSeekBar: true,
+      // Prevent orientation lock crashes and unwanted auto-rotation on mobile (e.g., Android Firefox)
+      forceLandscapeOnFullscreen: false,
+      enableFullscreenOnRotation: false,
       // Control bar layout matching the demo
       controlPanelElements: [
         "play_pause",
@@ -174,6 +171,69 @@ async function initializeShakaPlayer(
     };
 
     ui.configure(config);
+
+    // Guard against mobile browsers (especially Firefox on Android) resetting video.currentTime to 0
+    // or pausing playback when entering/exiting native fullscreen.
+    let lastPlaybackTime = 0;
+    let wasPlayingBeforeFullscreen = false;
+    let isFullscreenTransition = false;
+
+    const onTimeUpdate = () => {
+      if (videoElement.currentTime > 0.5) {
+        lastPlaybackTime = videoElement.currentTime;
+      }
+    };
+
+    const onPlay = () => {
+      wasPlayingBeforeFullscreen = true;
+    };
+
+    const onPause = () => {
+      if (!isFullscreenTransition) {
+        wasPlayingBeforeFullscreen = false;
+      }
+    };
+
+    const restorePlaybackState = () => {
+      if (lastPlaybackTime > 0.5 && videoElement.currentTime < 0.5) {
+        try {
+          videoElement.currentTime = lastPlaybackTime;
+        } catch (_) {}
+
+        if (wasPlayingBeforeFullscreen && videoElement.paused) {
+          videoElement.play().catch(() => {});
+        }
+      }
+    };
+
+    const onFullscreenChange = () => {
+      isFullscreenTransition = true;
+      restorePlaybackState();
+      setTimeout(restorePlaybackState, 100);
+      setTimeout(restorePlaybackState, 250);
+      setTimeout(restorePlaybackState, 500);
+      setTimeout(() => {
+        restorePlaybackState();
+        isFullscreenTransition = false;
+      }, 800);
+    };
+
+    videoElement.addEventListener("timeupdate", onTimeUpdate);
+    videoElement.addEventListener("play", onPlay);
+    videoElement.addEventListener("pause", onPause);
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+    document.addEventListener("mozfullscreenchange", onFullscreenChange);
+
+    container._videoStreamCleanup = () => {
+      videoElement.removeEventListener("timeupdate", onTimeUpdate);
+      videoElement.removeEventListener("play", onPlay);
+      videoElement.removeEventListener("pause", onPause);
+      document.removeEventListener("fullscreenchange", onFullscreenChange);
+      document.removeEventListener("webkitfullscreenchange", onFullscreenChange);
+      document.removeEventListener("mozfullscreenchange", onFullscreenChange);
+    };
 
     // Try playback sources in order until one succeeds
     let successfulSource = null;
@@ -203,9 +263,6 @@ async function initializeShakaPlayer(
       renderErrorMessage(container, "Failed to load video", videoId);
       return;
     }
-
-    // Remember the resolved provider in memory for instant playback on subsequent renders
-    RESOLVED_PROVIDER_CACHE.set(videoId, successfulSource.provider);
 
     // Update poster to matching provider if different from initial
     if (
@@ -309,6 +366,10 @@ function initializeVideoStreamPlayer(api) {
       return () => {
         const containers = element.querySelectorAll(".video-stream-container");
         containers.forEach((container) => {
+          if (container._videoStreamCleanup) {
+            container._videoStreamCleanup();
+            container._videoStreamCleanup = null;
+          }
           if (container.shakaPlayer) {
             container.shakaPlayer.destroy();
           }
