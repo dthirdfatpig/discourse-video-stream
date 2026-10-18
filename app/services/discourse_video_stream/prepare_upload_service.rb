@@ -17,6 +17,9 @@ module DiscourseVideoStream
 
     model :upload_details
 
+    FARADAY_TIMEOUT = 15
+    FARADAY_OPEN_TIMEOUT = 5
+
     private
 
     def fetch_upload_details(params:)
@@ -62,7 +65,10 @@ module DiscourseVideoStream
             "Content-Type" => "application/json",
             "Accept" => "application/json",
           },
-        )
+        ) do |req|
+          req.options.timeout = FARADAY_TIMEOUT
+          req.options.open_timeout = FARADAY_OPEN_TIMEOUT
+        end
 
       if create_response.status >= 400
         log_failure(create_response.status, parse_body(create_response.body))
@@ -99,14 +105,20 @@ module DiscourseVideoStream
 
     def extract_video_title(file_name)
       if SiteSetting.video_stream_keep_original_name && file_name.present?
-        return file_name
+        sanitized = file_name.to_s.gsub(/[\x00-\x1f]/, "").strip
+        return sanitized.truncate(255) if sanitized.present?
       end
 
       "Discourse Video - #{Time.now.strftime('%Y-%m-%d %H:%M:%S')}"
     end
 
     def parse_body(raw_body)
-      raw_body.is_a?(String) ? JSON.parse(raw_body) : raw_body
+      return {} if raw_body.blank?
+      return raw_body if raw_body.is_a?(Hash) || raw_body.is_a?(Array)
+
+      JSON.parse(raw_body)
+    rescue JSON::ParserError
+      { "raw" => raw_body.to_s.truncate(500) }
     end
 
     def log_failure(status, body)

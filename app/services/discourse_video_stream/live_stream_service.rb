@@ -16,6 +16,9 @@ module DiscourseVideoStream
 
     model :live_input
 
+    FARADAY_TIMEOUT = 15
+    FARADAY_OPEN_TIMEOUT = 5
+
     private
 
     def fetch_live_input(params:)
@@ -37,15 +40,18 @@ module DiscourseVideoStream
       end
 
       url = CF_LIVE_INPUT_PATH % { account_id: account_id }
-
-      payload = { meta: { name: params.name }, recording: { mode: "automatic" } }
+      clean_name = sanitize_name(params.name)
+      payload = { meta: { name: clean_name }, recording: { mode: "automatic" } }
 
       response =
         Faraday.post(
           url,
           payload.to_json,
           { "Authorization" => "Bearer #{api_token}", "Content-Type" => "application/json" },
-        )
+        ) do |req|
+          req.options.timeout = FARADAY_TIMEOUT
+          req.options.open_timeout = FARADAY_OPEN_TIMEOUT
+        end
 
       if response.status >= 400
         log_failure(response.status, parse_body(response.body))
@@ -81,7 +87,8 @@ module DiscourseVideoStream
       end
 
       url = BUNNY_LIVE_PATH % { library_id: library_id }
-      payload = { title: params.name }
+      clean_name = sanitize_name(params.name)
+      payload = { title: clean_name }
 
       response =
         Faraday.post(
@@ -92,7 +99,10 @@ module DiscourseVideoStream
             "Content-Type" => "application/json",
             "Accept" => "application/json",
           },
-        )
+        ) do |req|
+          req.options.timeout = FARADAY_TIMEOUT
+          req.options.open_timeout = FARADAY_OPEN_TIMEOUT
+        end
 
       if response.status >= 400
         log_failure(response.status, parse_body(response.body))
@@ -121,8 +131,18 @@ module DiscourseVideoStream
       context.fail!(error: I18n.t("video_stream.errors.create_live_input"), status: 422)
     end
 
+    def sanitize_name(name)
+      clean = name.to_s.gsub(/[\x00-\x1f]/, "").strip
+      clean.present? ? clean.truncate(255) : "Discourse Live Stream"
+    end
+
     def parse_body(raw_body)
-      raw_body.is_a?(String) ? JSON.parse(raw_body) : raw_body
+      return {} if raw_body.blank?
+      return raw_body if raw_body.is_a?(Hash) || raw_body.is_a?(Array)
+
+      JSON.parse(raw_body)
+    rescue JSON::ParserError
+      { "raw" => raw_body.to_s.truncate(500) }
     end
 
     def log_failure(status, body)

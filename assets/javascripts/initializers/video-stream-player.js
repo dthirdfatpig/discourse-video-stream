@@ -1,6 +1,9 @@
 import loadScript from "discourse/lib/load-script";
 import { withPluginApi } from "discourse/lib/plugin-api";
 
+// In-memory cache of resolved providers per videoId to eliminate redundant fallback network requests
+const RESOLVED_PROVIDER_CACHE = new Map();
+
 function cleanDomain(domain) {
   if (!domain) {
     return "";
@@ -12,8 +15,34 @@ function cleanDomain(domain) {
 }
 
 /**
+ * Safely render an error message in a video container without raw innerHTML interpolation
+ * @param {HTMLElement} container
+ * @param {string} message
+ * @param {string} [videoId]
+ */
+function renderErrorMessage(container, message, videoId) {
+  container.innerHTML = "";
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText =
+    "display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 2em; text-align: center; color: var(--primary-medium);";
+  const inner = document.createElement("div");
+  const p1 = document.createElement("p");
+  p1.textContent = message;
+  inner.appendChild(p1);
+  if (videoId) {
+    const p2 = document.createElement("p");
+    p2.style.cssText = "font-size: 0.9em; margin-top: 0.5em;";
+    p2.textContent = `Video ID: ${videoId}`;
+    inner.appendChild(p2);
+  }
+  wrapper.appendChild(inner);
+  container.appendChild(wrapper);
+}
+
+/**
  * Build an ordered list of candidate playback sources for a video.
  * If provider is specified in data-provider, that provider is prioritized.
+ * If cached from a previous successful load in this session, the cached provider is prioritized.
  * If not specified, standard UUIDs with hyphens prioritize Bunny, otherwise
  * the currently active panel provider is tried first, followed by the other.
  *
@@ -57,6 +86,8 @@ function getPlaybackSources(videoId, explicitProvider, siteSettings) {
   let preferredProvider;
   if (explicitProvider === "bunny" || explicitProvider === "cloudflare") {
     preferredProvider = explicitProvider;
+  } else if (RESOLVED_PROVIDER_CACHE.has(videoId)) {
+    preferredProvider = RESOLVED_PROVIDER_CACHE.get(videoId);
   } else if (videoId.includes("-")) {
     // Standard UUIDs with hyphens are characteristic of Bunny Stream GUIDs
     preferredProvider = "bunny";
@@ -169,16 +200,12 @@ async function initializeShakaPlayer(
         lastError,
         sources,
       });
-      container.innerHTML = `
-        <div style="display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 2em; text-align: center; color: var(--primary-medium);">
-          <div>
-            <p>Failed to load video</p>
-            <p style="font-size: 0.9em; margin-top: 0.5em;">Video ID: ${videoId}</p>
-          </div>
-        </div>
-      `;
+      renderErrorMessage(container, "Failed to load video", videoId);
       return;
     }
+
+    // Remember the resolved provider in memory for instant playback on subsequent renders
+    RESOLVED_PROVIDER_CACHE.set(videoId, successfulSource.provider);
 
     // Update poster to matching provider if different from initial
     if (
@@ -195,16 +222,11 @@ async function initializeShakaPlayer(
   } catch (error) {
     // eslint-disable-next-line no-console
     console.error("Failed to initialize Shaka Player:", error);
-    // Show generic error message
     if (container) {
-      container.innerHTML = `
-        <div style="display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 2em; text-align: center; color: var(--primary-medium);">
-          <div>
-            <p>Failed to initialize video player</p>
-            <p style="font-size: 0.9em; margin-top: 0.5em;">Please check the console for details</p>
-          </div>
-        </div>
-      `;
+      renderErrorMessage(
+        container,
+        "Failed to initialize video player. Please check the console for details."
+      );
     }
   }
 }
@@ -257,14 +279,7 @@ function initializeVideoStreamPlayer(api) {
         );
 
         if (!sources.length) {
-          container.innerHTML = `
-            <div style="display: flex; align-items: center; justify-content: center; min-height: 200px; padding: 2em; text-align: center; color: var(--primary-medium);">
-              <div>
-                <p>Playback not configured</p>
-                <p style="font-size: 0.9em; margin-top: 0.5em;">Video ID: ${videoId}</p>
-              </div>
-            </div>
-          `;
+          renderErrorMessage(container, "Playback not configured", videoId);
           return;
         }
 

@@ -21,6 +21,7 @@ plugins:
   video_stream_api_token:
     default: ""
     client: false
+    secret: true
     depends_on:
       - video_stream_provider
     depends_on_values:
@@ -48,6 +49,7 @@ plugins:
   video_stream_bunny_api_key:
     default: ""
     client: false
+    secret: true
     depends_on:
       - video_stream_provider
     depends_on_values:
