@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.14] - 2026-10-20
+
+### Fixed
+- **Native Upload Pipeline for Under-Threshold Videos**: Resolved an issue where videos under the configured file size threshold (e.g. 10 MB) remained stuck indefinitely on "Processing upload" with a spinning wheel and no network activity. Replaced `addComposerUploadHandler` with `addComposerUploadPreProcessor` (`UploadPreProcessorPlugin`), ensuring files under the threshold fall through seamlessly to Discourse's native upload pipeline (`/uploads.json`) while videos equal to or exceeding the threshold continue to be intercepted and directed to the streaming upload modal.
+- **Source Map 404 Errors**: Removed nonexistent `sourceMappingURL` directives from `shaka-player.ui.js`, `tus.min.js`, and `shaka-player.ui.css`, eliminating 404 warnings in browser developer tools (F12).
+
+---
+
 ## [0.0.13] - 2026-10-18
 
 ### Removed
