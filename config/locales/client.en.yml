@@ -3,7 +3,8 @@ en:
     admin:
       site_settings:
         categories:
-          video_stream: "Video streaming"
+          video_stream: "Bunny.net and Cloudflare Video Stream"
+          discourse_video_stream: "Bunny.net and Cloudflare Video Stream"
   js:
     video_stream:
       upload_video: "Upload video"

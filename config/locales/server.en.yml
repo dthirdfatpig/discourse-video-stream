@@ -1,4 +1,10 @@
 en:
+  admin_js:
+    admin:
+      site_settings:
+        categories:
+          video_stream: "Bunny.net and Cloudflare Video Stream"
+          discourse_video_stream: "Bunny.net and Cloudflare Video Stream"
   site_settings:
     video_stream_enabled: "Enable video uploads and playback"
     video_stream_provider: "Active streaming service provider for new uploads (playback supports both Cloudflare and Bunny simultaneously)"

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.0.15] - 2026-10-24
+
+### Changed
+- **Plugin Metadata & Branding**: Updated the plugin display name in the Discourse Admin UI to "Bunny.net and Cloudflare Video Stream", updated the author to `dthirdfatpig`, configured the repository URL to `https://github.com/dthirdfatpig/discourse-video-stream`, and updated the description to "Integrates Cloudflare and Bunny.net Video Stream for video uploads and playback in Discourse."
+
+---
+
 ## [0.0.14] - 2026-10-20
 
 ### Fixed
